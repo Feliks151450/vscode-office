@@ -29,6 +29,7 @@
     transition:
       background-color 0.18s var(--vditor-popover-ease, ease-in-out),
       color 0.18s var(--vditor-popover-ease, ease-in-out);
+    touch-action: none;
 
     &:hover {
       background: color-mix(in srgb, var(--toolbar-icon-color) 10%, transparent);
@@ -38,6 +39,11 @@
     &:active {
       cursor: grabbing;
       background: color-mix(in srgb, var(--toolbar-icon-color) 14%, transparent);
+    }
+
+    @media (pointer: coarse) {
+      width: 28px;
+      height: 28px;
     }
   }
 

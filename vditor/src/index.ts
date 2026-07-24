@@ -616,7 +616,6 @@ class Vditor {
                 linkPrefix: this.vditor.options.preview.markdown.linkPrefix,
                 listStyle: this.vditor.options.preview.markdown.listStyle,
                 mark: this.vditor.options.preview.markdown.mark,
-                obsidian: this.vditor.options.preview.markdown.obsidian,
                 mathBlockPreview: this.vditor.options.preview.markdown
                     .mathBlockPreview,
                 paragraphBeginningSpace: this.vditor.options.preview.markdown

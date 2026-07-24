@@ -203,13 +203,7 @@ declare class Lute {
 
     public SetMark(enable: boolean): void;
 
-    public SetObsidian(enable: boolean): void;
-
     public SetCallout(enable: boolean): void;
-
-    public SetObsidianWikiLink(enable: boolean): void;
-
-    public SetObsidianTag(enable: boolean): void;
 
     public SetSanitize(enable: boolean): void;
 
@@ -423,14 +417,6 @@ interface IMarkdownConfig {
     listStyle?: boolean;
     /** 支持 mark 标记 */
     mark?: boolean;
-    /** Obsidian 语法：callout、wikilink、#tag */
-    obsidian?: boolean;
-    /** 单独启用 Obsidian Callout（> [!note]） */
-    callout?: boolean;
-    /** 单独启用 Obsidian Wikilink（[[...]] / ![[...]]） */
-    obsidianWikiLink?: boolean;
-    /** 单独启用 Obsidian 标签（#tag） */
-    obsidianTag?: boolean;
 }
 
 /** @link https://ld246.com/article/1549638745630#options-preview */

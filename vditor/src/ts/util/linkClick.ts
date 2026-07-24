@@ -26,7 +26,7 @@ const getWikilinkElement = (target: HTMLElement) => {
     if (target.dataset?.type === "wikilink" || target.dataset?.type === "wikilink-embed") {
         return target;
     }
-    return target.closest?.("[data-type='wikilink'], [data-type='wikilink-embed'], .obsidian-wikilink, .obsidian-wikilink-embed") as HTMLElement | null;
+    return target.closest?.("[data-type='wikilink'], [data-type='wikilink-embed']") as HTMLElement | null;
 };
 
 const resolveIrLink = (target: HTMLElement): Omit<ILinkClickPayload, "action"> | null => {
@@ -76,21 +76,10 @@ export const resolveLinkClickFromTarget = (
         }
     }
 
-    const tagEl = hasClosestByAttribute(target, "data-type", "obsidian-tag")
-        || target.closest?.(".vditor-obsidian-tag, .obsidian-tag") as HTMLElement | null;
-    if (tagEl) {
-        const text = tagEl.textContent?.trim() || "";
-        const href = text.startsWith("#") ? text.slice(1) : text;
-        if (href) {
-            return { type: "tag", href, text, element: tagEl };
-        }
-    }
-
     const wikiEl = getWikilinkElement(target);
     if (wikiEl) {
         const href = wikiEl.getAttribute("data-href") || wikiEl.dataset?.href || "";
         const isEmbed = wikiEl.dataset?.type === "wikilink-embed"
-            || wikiEl.classList.contains("obsidian-wikilink-embed")
             || wikiEl.classList.contains("vditor-wikilink-embed");
         if (href) {
             const previewText = (wikiEl.querySelector(".vditor-wikilink__display") as HTMLElement | null)

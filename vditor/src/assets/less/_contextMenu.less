@@ -1,0 +1,72 @@
+.vditor-contextmenu {
+    position: fixed;
+    z-index: 99999;
+    min-width: 200px;
+    max-width: 280px;
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.06);
+    padding: 4px 0;
+    font-size: 13px;
+    line-height: 1.5;
+    color: #1f2937;
+    opacity: 0;
+    transform: scale(0.95);
+    pointer-events: none;
+    transition: opacity 0.12s ease, transform 0.12s ease;
+}
+
+.vditor-contextmenu--visible {
+    opacity: 1;
+    transform: scale(1);
+    pointer-events: auto;
+}
+
+.vditor-contextmenu__item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 16px;
+    cursor: pointer;
+    transition: background 0.1s;
+    white-space: nowrap;
+}
+
+.vditor-contextmenu__item:hover {
+    background: #f3f4f6;
+}
+
+.vditor-contextmenu__item-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    color: #6b7280;
+    font-size: 14px;
+}
+
+.vditor-contextmenu__item-label {
+    flex: 1;
+}
+
+.vditor-contextmenu__item-shortcut {
+    color: #9ca3af;
+    font-size: 12px;
+    margin-left: 16px;
+}
+
+.vditor-contextmenu__divider {
+    height: 1px;
+    background: #e5e7eb;
+    margin: 4px 0;
+}
+
+.vditor-contextmenu__group-label {
+    padding: 4px 16px 2px;
+    font-size: 11px;
+    color: #9ca3af;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}

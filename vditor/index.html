@@ -3,142 +3,472 @@
 
 <head>
     <meta charset="utf-8">
-    <title>Vditor</title>
+    <title>Vditor Demo</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <link rel="icon" href="./logo.png">
+    <link rel="stylesheet" href="./dist/index.css">
     <style>
-        :root {
-            --demo-accent: #4285f4;
-            --demo-accent-soft: #e8f0fe;
-            --demo-border: #e5e7eb;
-            --demo-text: #1f2937;
-            --demo-muted: #6b7280;
-        }
-
-        * {
-            box-sizing: border-box;
-        }
-
+        * { box-sizing: border-box; }
         body {
             margin: 0;
-            padding: 20px;
             min-height: 100vh;
-            background:
-                radial-gradient(circle at top left, rgba(66, 133, 244, 0.12), transparent 28%),
-                radial-gradient(circle at bottom right, rgba(99, 102, 241, 0.1), transparent 24%),
-                linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
-            color: var(--demo-text);
+            background: linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+        #vditor {
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.08);
         }
 
-        .demo-container {
-            display: flex;
-            flex-direction: column;
-            width: 100%;
-            max-width: 1200px;
-            height: calc(100vh - 40px);
-            margin: 0 auto;
-            background: rgba(255, 255, 255, 0.96);
-            border: 1px solid rgba(255, 255, 255, 0.8);
-            border-radius: 16px;
-            box-shadow:
-                0 20px 45px rgba(15, 23, 42, 0.08),
-                0 2px 8px rgba(15, 23, 42, 0.04);
-            overflow: hidden;
-            backdrop-filter: blur(8px);
+        /* 自定义右键菜单样式 */
+        .vditor-contextmenu {
+            position: fixed;
+            z-index: 99999;
+            min-width: 200px;
+            max-width: 280px;
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.06);
+            padding: 4px 0;
+            font-size: 13px;
+            line-height: 1.5;
+            color: #1f2937;
+            opacity: 0;
+            transform: scale(0.95);
+            pointer-events: none;
+            transition: opacity 0.12s ease, transform 0.12s ease;
         }
-
-        .demo-header {
+        .vditor-contextmenu--visible {
+            opacity: 1;
+            transform: scale(1);
+            pointer-events: auto;
+        }
+        .vditor-contextmenu__item {
             display: flex;
             align-items: center;
-            justify-content: space-between;
-            gap: 12px;
-            padding: 8px 16px;
-            border-bottom: 1px solid var(--demo-border);
-            background: linear-gradient(90deg, rgba(232, 240, 254, 0.9), rgba(255, 255, 255, 0.2));
-        }
-
-        .demo-brand {
-            min-width: 0;
-        }
-
-        .demo-title {
-            margin: 0;
-            font-size: 15px;
-            font-weight: 600;
-            line-height: 1.2;
-        }
-
-        .demo-subtitle {
-            margin: 2px 0 0;
-            font-size: 12px;
-            color: var(--demo-muted);
-        }
-
-        .demo-badges {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            justify-content: flex-end;
-        }
-
-        .demo-badge {
-            padding: 2px 8px;
-            border-radius: 999px;
-            background: var(--demo-accent-soft);
-            color: #1d4ed8;
-            font-size: 11px;
-            line-height: 1.4;
+            gap: 10px;
+            padding: 6px 16px;
+            cursor: pointer;
+            transition: background 0.1s;
             white-space: nowrap;
         }
-
-        .demo-editor {
+        .vditor-contextmenu__item:hover {
+            background: #f3f4f6;
+        }
+        .vditor-contextmenu__item-icon {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 18px;
+            height: 18px;
+            flex-shrink: 0;
+            color: #6b7280;
+            font-size: 14px;
+        }
+        .vditor-contextmenu__item-label {
             flex: 1;
-            min-height: 0;
-            background: #fff;
         }
-
-        #vditor {
-            height: 100%;
+        .vditor-contextmenu__item-shortcut {
+            color: #9ca3af;
+            font-size: 12px;
+            margin-left: 16px;
         }
-
-        @media (max-width: 640px) {
-            body {
-                padding: 12px;
-            }
-
-            .demo-container {
-                height: calc(100vh - 24px);
-                border-radius: 12px;
-            }
-
-            .demo-header {
-                align-items: flex-start;
-                flex-direction: column;
-            }
-
-            .demo-badges {
-                justify-content: flex-start;
-            }
+        .vditor-contextmenu__divider {
+            height: 1px;
+            background: #e5e7eb;
+            margin: 4px 0;
+        }
+        .vditor-contextmenu__group-label {
+            padding: 4px 16px 2px;
+            font-size: 11px;
+            color: #9ca3af;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
     </style>
 </head>
 
 <body>
-    <div class="demo-container">
-        <header class="demo-header">
-            <div class="demo-brand">
-                <h1 class="demo-title">Vditor</h1>
-                <p class="demo-subtitle">所见即所得 Markdown 编辑器</p>
-            </div>
-            <div class="demo-badges">
-                <span class="demo-badge">Demo</span>
-            </div>
-        </header>
-        <div class="demo-editor">
-            <div id="vditor"></div>
-        </div>
-    </div>
-    <script type="module" src="./index.js"></script>
+    <div id="vditor"></div>
+    <script src="./dist/index.min.js"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            try {
+                var vditor = new Vditor("vditor", {
+                    height: 600,
+                    outline: { enable: true },
+                    cache: { enable: false },
+                    cdn: ".",
+                    mode:"wysiwyg",
+                    value: "# Hello Vditor\n\n这是一个 **Vditor** 示例页面。\n\n## 功能演示\n\n- **粗体** / *斜体* / ~~删除线~~\n- `行内代码`\n- [链接](https://github.com)\n\n```javascript\nconsole.log('Hello World');\n```\n\n> 引用内容\n\n| 列1 | 列2 | 列3 |\n|-----|-----|-----|\n| A   | B   | C   |\n",
+                });
+
+                // 自定义右键菜单
+                initContextMenu(vditor);
+            } catch(e) {
+                console.error("Vditor init error:", e);
+                document.getElementById("vditor").innerHTML = "<p style='color:red;padding:20px'>初始化失败: " + e.message + "</p>";
+            }
+        });
+
+        function initContextMenu(vditor) {
+            // 创建右键菜单 DOM
+            var menuEl = document.createElement("div");
+            menuEl.className = "vditor-contextmenu";
+            menuEl.innerHTML = buildMenuHTML();
+            document.body.appendChild(menuEl);
+
+            var menuItems = {}; // 存储菜单项引用
+            menuEl.querySelectorAll("[data-menu-action]").forEach(function(el) {
+                menuItems[el.getAttribute("data-menu-action")] = el;
+            });
+
+            var currentMenuAction = null;
+
+            function showMenu(x, y) {
+                // 确保菜单不超出视口
+                var menuWidth = 220;
+                var menuHeight = menuEl.offsetHeight || 300;
+                var viewportWidth = window.innerWidth;
+                var viewportHeight = window.innerHeight;
+
+                if (x + menuWidth > viewportWidth) {
+                    x = viewportWidth - menuWidth - 8;
+                }
+                if (y + menuHeight > viewportHeight) {
+                    y = y - menuHeight;
+                }
+                if (x < 0) x = 8;
+                if (y < 0) y = 8;
+
+                menuEl.style.left = x + "px";
+                menuEl.style.top = y + "px";
+
+                // 强制回流后添加 visible 类触发过渡动画
+                menuEl.offsetHeight;
+                menuEl.classList.add("vditor-contextmenu--visible");
+            }
+
+            function hideMenu() {
+                menuEl.classList.remove("vditor-contextmenu--visible");
+                currentMenuAction = null;
+            }
+
+            // 在编辑器内容区监听右键事件
+            var editorElement = vditor[vditor.currentMode].element;
+
+            editorElement.addEventListener("contextmenu", function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+
+                // 确保焦点在编辑器内
+                var range = vditor.getSelection();
+                if (range) {
+                    currentMenuAction = range.toString() ? "selection" : "caret";
+                } else {
+                    currentMenuAction = "caret";
+                }
+
+                showMenu(e.clientX, e.clientY);
+            });
+
+            // 点击其他区域关闭菜单
+            document.addEventListener("mousedown", function(e) {
+                if (!menuEl.contains(e.target)) {
+                    hideMenu();
+                }
+            });
+
+            // 滚动时关闭菜单
+            window.addEventListener("scroll", hideMenu, true);
+            window.addEventListener("resize", hideMenu);
+
+            // 菜单项点击处理
+            menuEl.addEventListener("click", function(e) {
+                var item = e.target.closest("[data-menu-action]");
+                if (!item) return;
+
+                var action = item.getAttribute("data-menu-action");
+                executeAction(vditor, action);
+                hideMenu();
+            });
+
+            // 阻止菜单上的右键冒泡
+            menuEl.addEventListener("contextmenu", function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+            });
+        }
+
+        function buildMenuHTML() {
+            var iconBold = '<b>B</b>';
+            var iconItalic = '<i>I</i>';
+            var iconStrike = '<s>S</s>';
+            var iconH1 = '<b>H1</b>';
+            var iconH2 = '<b>H2</b>';
+            var iconCode = '<code>&lt;/&gt;</code>';
+            var iconQuote = '<b>"</b>';
+            var iconUL = '<b>&#8226;</b>';
+            var iconOL = '<b>1.</b>';
+            var iconLink = '<b>🔗</b>';
+            var iconImage = '<b>🖼</b>';
+            var iconHR = '<b>&mdash;</b>';
+            var iconAI = '<b>✨</b>';
+            var iconCopy = '<b>📋</b>';
+            var iconCut = '<b>✂️</b>';
+
+            return [
+                '<div class="vditor-contextmenu__group-label">文本格式</div>',
+                menuItem('bold', iconBold, '加粗', 'Ctrl+B'),
+                menuItem('italic', iconItalic, '斜体', 'Ctrl+I'),
+                menuItem('strikethrough', iconStrike, '删除线'),
+                '<div class="vditor-contextmenu__divider"></div>',
+                menuItem('h1', iconH1, '标题 1'),
+                menuItem('h2', iconH2, '标题 2'),
+                '<div class="vditor-contextmenu__divider"></div>',
+                menuItem('code', iconCode, '行内代码'),
+                menuItem('codeblock', iconCode, '代码块'),
+                menuItem('quote', iconQuote, '引用'),
+                '<div class="vditor-contextmenu__divider"></div>',
+                menuItem('unordered-list', iconUL, '无序列表'),
+                menuItem('ordered-list', iconOL, '有序列表'),
+                '<div class="vditor-contextmenu__divider"></div>',
+                menuItem('insert-link', iconLink, '插入链接'),
+                menuItem('insert-image', iconImage, '插入图片'),
+                menuItem('horizontal-rule', iconHR, '分割线'),
+                '<div class="vditor-contextmenu__divider"></div>',
+                menuItem('copy', iconCopy, '复制', 'Ctrl+C'),
+                menuItem('cut', iconCut, '剪切', 'Ctrl+X'),
+            ].join('');
+        }
+
+        function menuItem(action, icon, label, shortcut) {
+            var shortcutHtml = shortcut ? '<span class="vditor-contextmenu__item-shortcut">' + shortcut + '</span>' : '';
+            return '<div class="vditor-contextmenu__item" data-menu-action="' + action + '">' +
+                '<span class="vditor-contextmenu__item-icon">' + icon + '</span>' +
+                '<span class="vditor-contextmenu__item-label">' + label + '</span>' +
+                shortcutHtml +
+                '</div>';
+        }
+
+        function executeAction(vditor, action) {
+            var editor = vditor[vditor.currentMode].element;
+            editor.focus();
+
+            switch (action) {
+                case 'bold':
+                    document.execCommand('bold', false, '');
+                    break;
+                case 'italic':
+                    document.execCommand('italic', false, '');
+                    break;
+                case 'strikethrough':
+                    document.execCommand('strikeThrough', false, '');
+                    break;
+                case 'h1':
+                    insertHeading(vditor, 1);
+                    break;
+                case 'h2':
+                    insertHeading(vditor, 2);
+                    break;
+                case 'code':
+                    wrapSelection(vditor, '`', '`');
+                    break;
+                case 'codeblock':
+                    insertCodeBlock(vditor);
+                    break;
+                case 'quote':
+                    insertBlockPrefix(vditor, '> ');
+                    break;
+                case 'unordered-list':
+                    document.execCommand('insertUnorderedList', false, '');
+                    break;
+                case 'ordered-list':
+                    document.execCommand('insertOrderedList', false, '');
+                    break;
+                case 'insert-link':
+                    insertLink(vditor);
+                    break;
+                case 'insert-image':
+                    insertImage(vditor);
+                    break;
+                case 'horizontal-rule':
+                    insertHorizontalRule(vditor);
+                    break;
+                case 'copy':
+                    document.execCommand('copy', false, '');
+                    break;
+                case 'cut':
+                    document.execCommand('cut', false, '');
+                    break;
+            }
+        }
+
+        function insertHeading(vditor, level) {
+            var editor = vditor[vditor.currentMode].element;
+            var selection = window.getSelection();
+            if (selection.rangeCount === 0) return;
+
+            var range = selection.getRangeAt(0);
+            var block = findClosestBlock(range.startContainer);
+            if (!block) return;
+
+            var prefix = '#'.repeat(level) + ' ';
+            var currentText = block.textContent || '';
+
+            // 如果已经是同级标题，取消标题格式
+            if (currentText.startsWith(prefix)) {
+                var newText = currentText.substring(prefix.length);
+                block.textContent = newText;
+            } else {
+                // 移除已有标题标记
+                var cleaned = currentText.replace(/^#{1,6}\s/, '');
+                block.textContent = prefix + cleaned;
+            }
+
+            // 将光标放到行首
+            var newRange = document.createRange();
+            newRange.setStart(block, 0);
+            newRange.collapse(true);
+            selection.removeAllRanges();
+            selection.addRange(newRange);
+
+            // 触发 Vditor 重新渲染
+            vditor.insertValue('');
+        }
+
+        function findClosestBlock(node) {
+            while (node && node !== document.body) {
+                if (node.nodeType === 1) {
+                    var el = node;
+                    // Vditor wysiwyg 模式下，块级元素包含各种标记
+                    if (el.tagName === 'P' || el.tagName === 'DIV' ||
+                        el.classList.contains('vditor-wysiwyg__preview') ||
+                        el.getAttribute('data-block') === '1') {
+                        return el;
+                    }
+                }
+                node = node.parentNode;
+            }
+            // 回退到编辑器元素本身
+            return null;
+        }
+
+        function wrapSelection(vditor, before, after) {
+            var selection = window.getSelection();
+            if (selection.rangeCount === 0) return;
+
+            var range = selection.getRangeAt(0);
+            var selectedText = range.toString();
+
+            if (selectedText) {
+                // 有选中文本，包裹它
+                var span = document.createElement('code');
+                span.textContent = selectedText;
+                range.deleteContents();
+                range.insertNode(span);
+
+                // 选中包裹后的内容
+                var newRange = document.createRange();
+                newRange.selectNodeContents(span);
+                selection.removeAllRanges();
+                selection.addRange(newRange);
+            } else {
+                // 无选中文本，插入前后标记并选中
+                var textNode = document.createTextNode(before + after);
+                range.insertNode(textNode);
+
+                var newRange = document.createRange();
+                newRange.setStart(textNode, before.length);
+                newRange.setEnd(textNode, before.length);
+                newRange.collapse(true);
+                selection.removeAllRanges();
+                selection.addRange(newRange);
+            }
+        }
+
+        function insertCodeBlock(vditor) {
+            var editor = vditor[vditor.currentMode].element;
+            var selection = window.getSelection();
+            if (selection.rangeCount === 0) return;
+
+            var range = selection.getRangeAt(0);
+            var block = findClosestBlock(range.startContainer);
+            if (!block) return;
+
+            var text = block.textContent || '';
+            var cleaned = text.replace(/^#{1,6}\s/, '');
+            block.innerHTML = '<pre><code>' + escapeHtml(cleaned) + '</code></pre>';
+
+            // 移动光标到代码块内
+            var codeEl = block.querySelector('code');
+            if (codeEl) {
+                var newRange = document.createRange();
+                newRange.selectNodeContents(codeEl);
+                newRange.collapse(true);
+                selection.removeAllRanges();
+                selection.addRange(newRange);
+            }
+
+            vditor.insertValue('');
+        }
+
+        function insertBlockPrefix(vditor, prefix) {
+            var editor = vditor[vditor.currentMode].element;
+            var selection = window.getSelection();
+            if (selection.rangeCount === 0) return;
+
+            var range = selection.getRangeAt(0);
+            var block = findClosestBlock(range.startContainer);
+            if (!block) return;
+
+            var text = block.textContent || '';
+            var cleaned = text.replace(/^#{1,6}\s/, '');
+
+            // 切换引用状态
+            if (cleaned.startsWith(prefix)) {
+                block.textContent = cleaned.substring(prefix.length);
+            } else {
+                block.textContent = prefix + cleaned;
+            }
+
+            var newRange = document.createRange();
+            newRange.setStart(block, 0);
+            newRange.collapse(true);
+            selection.removeAllRanges();
+            selection.addRange(newRange);
+
+            vditor.insertValue('');
+        }
+
+        function insertLink(vditor) {
+            var selection = window.getSelection();
+            var selectedText = selection.toString() || '链接文本';
+            var url = prompt('请输入链接地址:', 'https://');
+            if (!url) return;
+
+            var markdown = '[' + selectedText + '](' + url + ')';
+            vditor.insertValue(markdown);
+        }
+
+        function insertImage(vditor) {
+            var url = prompt('请输入图片地址:', 'https://');
+            if (!url) return;
+
+            var markdown = '![](' + url + ')';
+            vditor.insertValue(markdown);
+        }
+
+        function insertHorizontalRule(vditor) {
+            vditor.insertValue('\n\n---\n\n');
+        }
+
+        function escapeHtml(text) {
+            var div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+    </script>
 </body>
 
 </html>

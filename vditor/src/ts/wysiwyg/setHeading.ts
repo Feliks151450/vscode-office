@@ -1,4 +1,4 @@
-import {hasClosestBlock} from "../util/hasClosest";
+import {hasClosestBlock, hasClosestByMatchTag} from "../util/hasClosest";
 import {getEditorRange, setRangeByWbr} from "../util/selection";
 import {renderTocNow} from "../util/toc";
 
@@ -12,16 +12,33 @@ export const setHeading = (vditor: IVditor, tagName: string) => {
         blockElement = vditor.wysiwyg.element;
     }
     if (blockElement && !blockElement.classList.contains("vditor-wysiwyg__block")) {
-        range.insertNode(document.createElement("wbr"));
-        // Firefox 需要 trim https://github.com/Vanessa219/vditor/issues/207
-        if (blockElement.innerHTML.trim() === "<wbr>") {
-            // Firefox 光标对不齐 https://github.com/Vanessa219/vditor/issues/199 1
-            blockElement.innerHTML = "<wbr><br>";
+        let targetElement = blockElement;
+        let listParent: HTMLElement | null = null;
+        if (blockElement.tagName === "UL" || blockElement.tagName === "OL") {
+            const liElement = hasClosestByMatchTag(range.startContainer, "LI") as HTMLElement;
+            if (liElement) {
+                targetElement = liElement;
+                listParent = blockElement;
+            }
         }
-        if (blockElement.tagName === "BLOCKQUOTE" || blockElement.classList.contains("vditor-reset")) {
-            blockElement.innerHTML = `<${tagName} data-block="0">${blockElement.innerHTML.trim()}</${tagName}>`;
+        range.insertNode(document.createElement("wbr"));
+        if (targetElement.innerHTML.trim() === "<wbr>") {
+            targetElement.innerHTML = "<wbr><br>";
+        }
+        const headingHtml = `<${tagName} data-block="0">${targetElement.innerHTML.trim()}</${tagName}>`;
+        if (targetElement.tagName === "BLOCKQUOTE" || targetElement.classList.contains("vditor-reset")) {
+            targetElement.innerHTML = headingHtml;
+        } else if (listParent) {
+            const heading = document.createElement(tagName);
+            heading.setAttribute("data-block", "0");
+            heading.innerHTML = targetElement.innerHTML.trim();
+            listParent.parentElement?.insertBefore(heading, listParent.nextSibling);
+            targetElement.remove();
+            if (listParent.children.length === 0) {
+                listParent.remove();
+            }
         } else {
-            blockElement.outerHTML = `<${tagName} data-block="0">${blockElement.innerHTML.trim()}</${tagName}>`;
+            targetElement.outerHTML = headingHtml;
         }
         setRangeByWbr(vditor.wysiwyg.element, range);
         renderTocNow(vditor);

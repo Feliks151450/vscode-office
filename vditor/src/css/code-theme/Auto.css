@@ -1,7 +1,7 @@
 html[data-cm-theme="Auto"],
 #vditor[data-cm-theme="Auto"] {
     /* Surface */
-    --cm-bg-color: var(--vscode-editorWidget-background, var(--vscode-textCodeBlock-background, rgba(127, 127, 127, 0.15)));
+    --cm-bg-color: var(--vscode-editorWidget-background, #f6f8fa);
     --cm-lang-trigger-bg: var(--vscode-input-background, var(--vscode-dropdown-background, var(--vscode-editorWidget-background, rgba(127, 127, 127, 0.12))));
     --cm-fg-color: var(--vscode-editor-foreground, #24292e);
 

@@ -1,0 +1,55 @@
+.vditor-bubble-menu {
+  position: absolute;
+  z-index: 10001;
+  display: none;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  background: var(--panel-background-color, #fff);
+  border: 1px solid color-mix(in srgb, var(--toolbar-icon-color, #586069) 18%, transparent);
+  border-radius: 8px;
+  box-shadow:
+    0 4px 16px color-mix(in srgb, #000 18%, transparent),
+    0 1px 4px color-mix(in srgb, #000 10%, transparent);
+  animation: vditor-bubble-menu-in 0.15s ease;
+
+  &--visible {
+    display: flex;
+  }
+
+  &__btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--toolbar-icon-color, #586069);
+    cursor: pointer;
+    transition: background-color 0.12s ease, color 0.12s ease;
+
+    .codicon {
+      font-size: 14px;
+      line-height: 1;
+    }
+
+    &:hover {
+      background: color-mix(in srgb, var(--toolbar-icon-color, #586069) 10%, transparent);
+      color: var(--toolbar-icon-hover-color, #4285f4);
+    }
+  }
+}
+
+@keyframes vditor-bubble-menu-in {
+  0% {
+    opacity: 0;
+    transform: translateY(4px) scale(0.96);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}

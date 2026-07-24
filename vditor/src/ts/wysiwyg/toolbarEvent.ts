@@ -174,20 +174,27 @@ export const toolbarEvent = (vditor: IVditor, actionBtn: Element, event: Event) 
             removeCurrentToolbar(vditor.toolbar.elements, ["check", "list", "ordered-list"]);
             actionBtn.classList.add("vditor-menu--current");
         } else if (commandName === "inline-code") {
-            if (range.toString() === "") {
+            const existingCode = hasClosestByMatchTag(range.startContainer, "CODE");
+            if (existingCode) {
+                existingCode.outerHTML = existingCode.innerHTML.replace(Constants.ZWSP, "") + "<wbr>";
+                setRangeByWbr(vditor.wysiwyg.element, range);
+                useHighlight = false;
+                actionBtn.classList.remove("vditor-menu--current");
+            } else if (range.toString() === "") {
                 const node = document.createElement("code");
                 node.textContent = Constants.ZWSP;
                 range.insertNode(node);
                 range.setStart(node.firstChild, 1);
                 range.collapse(true);
                 setSelectionFocus(range);
+                actionBtn.classList.add("vditor-menu--current");
             } else if (range.startContainer.nodeType === 3) {
                 const node = document.createElement("code");
                 range.surroundContents(node);
                 range.insertNode(node);
                 setSelectionFocus(range);
+                actionBtn.classList.add("vditor-menu--current");
             }
-            actionBtn.classList.add("vditor-menu--current");
         } else if (commandName === "code") {
             const node = document.createElement("div");
             node.className = "vditor-wysiwyg__block";
@@ -197,8 +204,15 @@ export const toolbarEvent = (vditor: IVditor, actionBtn: Element, event: Event) 
             if (range.toString() === "") {
                 node.innerHTML = "<pre><code><wbr>\n</code></pre>";
             } else {
-                node.innerHTML = `<pre><code>${range.toString()}<wbr></code></pre>`;
+                const selectedHtml = range.cloneContents();
+                const tempDiv = document.createElement("div");
+                tempDiv.appendChild(selectedHtml);
+                node.innerHTML = `<pre><code>${tempDiv.innerHTML}<wbr></code></pre>`;
                 range.deleteContents();
+                if (blockElement) {
+                    range.selectNodeContents(blockElement);
+                    range.collapse(false);
+                }
             }
             range.insertNode(node);
             if (blockElement) {

@@ -3,10 +3,10 @@
 #vditor[data-editor-theme]:not([data-editor-theme="Auto"]) {
   --table-border: var(--border-color);
   --table-row-border: var(--border-color);
-  --panel-background-color: var(--textarea-background-color, var(--bg-color));
-  --toolbar-icon-color: var(--front-color);
-  --toolbar-icon-hover-color: var(--list-hover-color);
-  --textarea-text-color: var(--front-color);
+  --panel-background-color: var(--textarea-background-color, var(--bg-color, #fff));
+  --toolbar-icon-color: var(--front-color, #586069);
+  --toolbar-icon-hover-color: var(--list-hover-color, #4285f4);
+  --textarea-text-color: var(--front-color, #24292e);
   --pre-code-bg-image: none;
   --vditor-input-border: 1px solid var(--border-color);
 }
@@ -16,16 +16,58 @@
   --vditor-toolbar-border-bottom: 1px solid var(--border-color);
   --vditor-outline-border: none;
   --vditor-outline-title-display: none;
-  --vditor-root-background: var(--textarea-background-color, var(--bg-color));
+  --vditor-root-background: var(--textarea-background-color, var(--bg-color, #fff));
   --mobile-outline-trigger-size: 38px;
-  --mobile-outline-trigger-top: max(8px, env(safe-area-inset-top, 0px));
-  --mobile-outline-trigger-left: max(10px, env(safe-area-inset-left, 0px));
+  --mobile-outline-trigger-top: 0px;
+  --mobile-outline-trigger-left: 0px;
   --mobile-outline-gap: 6px;
 }
 
-#vditor[data-editor-theme] .vditor-mobile-outline-trigger,
+#vditor[data-editor-theme] .vditor-mobile-outline-trigger:not(.vditor-mobile-outline-trigger--desktop):not(.vditor-mobile-outline-trigger--mobile-ready),
 #vditor[data-editor-theme] .vditor-outline__backdrop {
-  display: none;
+  display: none !important;
+}
+
+#vditor[data-editor-theme] .vditor-mobile-outline-trigger.vditor-mobile-outline-trigger--desktop {
+  display: inline-flex !important;
+  position: absolute;
+  top: 50%;
+  left: 0;
+  transform: translateY(-50%) translateX(-30%);
+  z-index: 12;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 48px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--border-color);
+  border-left: none;
+  border-radius: 0 6px 6px 0;
+  background: var(--outline-bg-color, var(--panel-background-color));
+  color: var(--toolbar-icon-color);
+  box-shadow: 2px 0 4px rgba(0, 0, 0, 0.08);
+  cursor: pointer;
+  transition: width 0.15s ease, background-color 0.15s ease, transform 0.15s ease;
+
+  .codicon {
+    font-size: 14px;
+    line-height: 1;
+  }
+
+  &:hover {
+    width: 32px;
+    background-color: var(--outline-hover-bg);
+    transform: translateY(-50%) translateX(0);
+  }
+}
+
+#vditor[data-editor-theme] .vditor-mobile-outline-trigger.vditor-mobile-outline-trigger--desktop.vditor-mobile-outline-trigger--active {
+  transform: translateY(-50%) translateX(0);
+  width: 32px;
+  color: var(--list-hover-color, var(--toolbar-icon-hover-color));
+  border-color: color-mix(in srgb, var(--list-hover-color, var(--toolbar-icon-hover-color)) 40%, var(--border-color));
+  background: color-mix(in srgb, var(--list-hover-color, var(--toolbar-icon-hover-color)) 10%, var(--outline-bg-color, var(--panel-background-color)));
 }
 
 @media (max-width: 700px) {
@@ -39,48 +81,45 @@
     }
 
     .vditor-mobile-outline-trigger {
-      display: inline-flex;
-      position: fixed;
-      top: var(--mobile-outline-trigger-top);
-      left: var(--mobile-outline-trigger-left);
-      z-index: 201;
-      align-items: center;
-      justify-content: center;
-      width: var(--mobile-outline-trigger-size);
-      height: var(--mobile-outline-trigger-size);
+      display: inline-flex !important;
+      position: absolute;
+      top: 4px;
+      left: 0;
+      transform: translateX(-30%);
+      z-index: 12;
+      width: 24px;
+      height: 36px;
       margin: 0;
       padding: 0;
-      border: 1px solid color-mix(in srgb, var(--border-color) 72%, transparent);
-      border-radius: 10px;
+      border: 1px solid var(--border-color);
+      border-left: none;
+      border-radius: 0 6px 6px 0;
       background: color-mix(in srgb, var(--textarea-background-color, var(--bg-color)) 90%, transparent);
-      color: var(--front-color, var(--toolbar-icon-color));
-      box-shadow:
-        0 2px 8px color-mix(in srgb, #000 8%, transparent),
-        0 0 0 1px color-mix(in srgb, #fff 5%, transparent) inset;
+      color: var(--toolbar-icon-color);
+      box-shadow: 2px 0 4px rgba(0, 0, 0, 0.08);
       backdrop-filter: blur(10px);
       cursor: pointer;
-      transition:
-        background-color 0.16s ease,
-        border-color 0.16s ease,
-        box-shadow 0.16s ease,
-        transform 0.16s ease,
-        color 0.16s ease;
-      -webkit-tap-highlight-color: transparent;
-      touch-action: manipulation;
+      transition: width 0.15s ease, background-color 0.15s ease, transform 0.15s ease;
+      align-items: center;
+      justify-content: center;
 
       .codicon {
-        font-size: 18px;
+        font-size: 14px;
         line-height: 1;
       }
 
-      &:active {
-        transform: scale(0.96);
+      &:hover {
+        width: 32px;
+        background-color: var(--outline-hover-bg);
+        transform: translateX(0);
       }
 
       &--active {
+        transform: translateX(0);
+        width: 32px;
         color: var(--list-hover-color, var(--toolbar-icon-hover-color));
         border-color: color-mix(in srgb, var(--list-hover-color, var(--toolbar-icon-hover-color)) 40%, var(--border-color));
-        background: color-mix(in srgb, var(--list-hover-color, var(--toolbar-icon-hover-color)) 10%, var(--textarea-background-color, var(--bg-color)));
+        background: color-mix(in srgb, var(--list-hover-color, var(--toolbar-icon-hover-color)) 10%, var(--outline-bg-color, var(--panel-background-color)));
       }
     }
 

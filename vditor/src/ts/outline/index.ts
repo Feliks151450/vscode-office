@@ -203,14 +203,12 @@ export class Outline {
                 setMobileOutlineDrawerOpen(vditor, false);
                 this.element.style.display = "none";
                 this.element.classList.remove("vditor-outline--mobile-open");
-                syncMobileOutlinePanel(vditor, false);
             } else {
                 this.element.style.display = "none";
-            }
-            this.unbindScrollSpyListener();
-            if (!mobileLayout) {
                 btnElement?.classList.remove("vditor-menu--current");
             }
+            syncMobileOutlinePanel(vditor, false);
+            this.unbindScrollSpyListener();
         }
         if (!mobileLayout) {
             vditor.options.outline.enable = show;

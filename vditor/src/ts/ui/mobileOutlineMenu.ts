@@ -20,6 +20,11 @@ export const isEditorThemeMobileLayout = (vditor: IVditor): boolean => {
         && window.innerWidth <= EDITOR_THEME_MOBILE_BREAKPOINT;
 };
 
+export const isDesktopLayout = (vditor: IVditor): boolean => {
+    return vditor.element.hasAttribute("data-editor-theme")
+        && window.innerWidth > EDITOR_THEME_MOBILE_BREAKPOINT;
+};
+
 export const isOutlinePanelVisible = (vditor: IVditor): boolean => {
     if (isEditorThemeMobileLayout(vditor)) {
         return vditor.outline.element.classList.contains("vditor-outline--mobile-open");
@@ -54,24 +59,28 @@ const clearMobileOutlineUi = (vditor: IVditor) => {
     host?.backdrop.classList.remove("vditor-outline__backdrop--visible");
     if (host) {
         host.drawerOpen = false;
-        updateMobileOutlineTrigger(host.menuBtn, false);
+        if (!isDesktopLayout(vditor)) {
+            updateMobileOutlineTrigger(host.menuBtn, false);
+        }
     }
 };
 
 export const syncMobileOutlinePanel = (vditor: IVditor, show: boolean) => {
     const host = getHost(vditor);
     const outline = vditor.outline.element;
+    if (host) {
+        host.drawerOpen = show;
+        host.menuBtn.classList.toggle("vditor-mobile-outline-trigger--active", show);
+        host.menuBtn.setAttribute("aria-expanded", show ? "true" : "false");
+        host.menuBtn.innerHTML = show ? codicon("close") : codicon("list-tree");
+    }
     if (!isEditorThemeMobileLayout(vditor)) {
-        clearMobileOutlineUi(vditor);
         return;
     }
 
     outline.style.display = "";
     outline.classList.toggle("vditor-outline--mobile-open", show);
     host?.backdrop.classList.toggle("vditor-outline__backdrop--visible", show);
-    if (host) {
-        updateMobileOutlineTrigger(host.menuBtn, show);
-    }
     vditor.element.classList.toggle("vditor--mobile-outline-open", show);
 };
 
@@ -96,8 +105,14 @@ const handleMobileOutlineResize = (vditor: IVditor) => {
             vditor.outline.restoreDesktopState(vditor);
         }
         host.wasMobileLayout = false;
+        if (isDesktopLayout(vditor)) {
+            host.menuBtn.style.display = "";
+            host.menuBtn.classList.toggle("vditor-mobile-outline-trigger--active", host.drawerOpen);
+        }
         return;
     }
+
+    host.menuBtn.classList.remove("vditor-mobile-outline-trigger--desktop");
 
     if (!host.wasMobileLayout) {
         setMobileOutlineDrawerOpen(vditor, false);
@@ -132,7 +147,15 @@ export const initMobileOutlineMenu = (vditor: IVditor) => {
     menuBtn.className = "vditor-mobile-outline-trigger";
     menuBtn.setAttribute("aria-label", window.VditorI18n?.outline || "Outline");
     menuBtn.setAttribute("aria-expanded", "false");
-    menuBtn.innerHTML = codicon("menu");
+    menuBtn.innerHTML = codicon("list-tree");
+
+    const isDesktop = window.innerWidth > EDITOR_THEME_MOBILE_BREAKPOINT;
+    if (isDesktop) {
+        menuBtn.classList.add("vditor-mobile-outline-trigger--desktop");
+    } else {
+        menuBtn.classList.add("vditor-mobile-outline-trigger--mobile-ready");
+    }
+
     vditor.element.appendChild(menuBtn);
 
     const backdrop = document.createElement("div");
@@ -152,8 +175,13 @@ export const initMobileOutlineMenu = (vditor: IVditor) => {
     menuBtn.addEventListener(getEventName(), (event) => {
         event.preventDefault();
         const open = !host.drawerOpen;
-        setMobileOutlineDrawerOpen(vditor, open);
-        vditor.outline.toggle(vditor, open);
+        if (isDesktopLayout(vditor)) {
+            host.drawerOpen = open;
+            vditor.outline.toggle(vditor, open);
+        } else {
+            setMobileOutlineDrawerOpen(vditor, open);
+            vditor.outline.toggle(vditor, open);
+        }
     });
 
     backdrop.addEventListener("click", () => {
@@ -162,7 +190,18 @@ export const initMobileOutlineMenu = (vditor: IVditor) => {
 
     const onResize = () => {
         handleMobileOutlineResize(vditor);
+        const desktop = window.innerWidth > EDITOR_THEME_MOBILE_BREAKPOINT;
+        menuBtn.classList.toggle("vditor-mobile-outline-trigger--desktop", desktop);
+        menuBtn.classList.toggle("vditor-mobile-outline-trigger--mobile-ready", !desktop);
     };
     window.addEventListener("resize", onResize);
     handleMobileOutlineResize(vditor);
+
+    if (isDesktopLayout(vditor)) {
+        const outlineEnabled = vditor.options.outline.enable;
+        host.drawerOpen = outlineEnabled;
+        menuBtn.classList.toggle("vditor-mobile-outline-trigger--active", outlineEnabled);
+        menuBtn.setAttribute("aria-expanded", outlineEnabled ? "true" : "false");
+        menuBtn.innerHTML = outlineEnabled ? codicon("close") : codicon("list-tree");
+    }
 };

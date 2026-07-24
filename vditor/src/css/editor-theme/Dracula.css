@@ -37,9 +37,9 @@ html[data-editor-theme="Dracula"],
     --toolbar-background-color: #21222c;
     --toolbar-icon-color: var(--front-color);
     --toolbar-icon-hover-color: #8be9fd;
-    --panel-background-color: var(--bg-color);
+    --panel-background-color: var(--bg-color, #fff);
     --panel-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
-    --textarea-background-color: var(--bg-color);
+    --textarea-background-color: var(--bg-color, #fff);
     --textarea-text-color: var(--front-color);
     --count-background-color: rgba(98, 114, 164, 0.35);
 

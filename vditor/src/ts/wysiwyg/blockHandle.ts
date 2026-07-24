@@ -493,7 +493,7 @@ const hideHandle = (state: IBlockHandleState) => {
         state.activeBlock = null;
         state.visible = false;
         state.root.classList.remove(`${ROOT_CLASS}--visible`);
-    }, 500);
+    }, 1500);
 };
 
 const removeDragGhost = (state: IBlockHandleState) => {
@@ -654,9 +654,6 @@ const startDrag = (vditor: IVditor, state: IBlockHandleState, event: PointerEven
     document.body.style.userSelect = "none";
     document.body.style.cursor = "grabbing";
 
-    const initialLine = resolveDropTarget(editor, event.clientY, block);
-    state.dropTarget = { container: initialLine.container, referenceNode: initialLine.referenceNode };
-    positionDropLine(state, state.dropTarget);
     state.dragBtn.setPointerCapture(event.pointerId);
 
     const onPointerMove = (moveEvent: PointerEvent) => {
@@ -768,6 +765,13 @@ export const initBlockHandle = (vditor: IVditor, wrapper: HTMLElement, editorEle
     dragBtn.addEventListener("mousedown", (event) => {
         event.preventDefault();
     });
+    dragBtn.addEventListener("contextmenu", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+    });
+    dragBtn.addEventListener("touchstart", (event) => {
+        event.preventDefault();
+    }, { passive: false });
     dragBtn.addEventListener("pointerdown", (event) => {
         startDrag(vditor, state, event);
     });
@@ -834,8 +838,46 @@ export const initBlockHandle = (vditor: IVditor, wrapper: HTMLElement, editorEle
         }, 500);
     };
 
+    const isTouchDevice = () => {
+        return "ontouchstart" in window || navigator.maxTouchPoints > 0;
+    };
+
+    let touchHideTimer: number | null = null;
+
+    const onPointerDown = (event: PointerEvent) => {
+        if (state.dragging || event.pointerType !== "touch") {
+            return;
+        }
+        if (touchHideTimer !== null) {
+            clearTimeout(touchHideTimer);
+            touchHideTimer = null;
+        }
+        if (!shouldShowHandle(vditor, editorElement, event.target)) {
+            return;
+        }
+        const block = getDraggableBlockFromPoint(event.clientX, event.clientY, editorElement);
+        if (block) {
+            showForBlock(vditor, block);
+        }
+    };
+
+    const onPointerUp = (event: PointerEvent) => {
+        if (state.dragging || event.pointerType !== "touch") {
+            return;
+        }
+        if (touchHideTimer !== null) {
+            clearTimeout(touchHideTimer);
+        }
+        touchHideTimer = window.setTimeout(() => {
+            touchHideTimer = null;
+            hideHandle(state);
+        }, 2000);
+    };
+
     wrapper.addEventListener("mousemove", onMouseMove);
     wrapper.addEventListener("mouseleave", onMouseLeave);
+    wrapper.addEventListener("pointerdown", onPointerDown);
+    wrapper.addEventListener("pointerup", onPointerUp);
     editorElement.addEventListener("keydown", onKeyDown, { capture: true });
     editorElement.addEventListener("scroll", onScroll);
     window.addEventListener("scroll", onScroll, { passive: true });
@@ -846,8 +888,13 @@ export const initBlockHandle = (vditor: IVditor, wrapper: HTMLElement, editorEle
             state.moveRafId = 0;
         }
         setBlockHandleTarget(state, null);
+        if (touchHideTimer !== null) {
+            clearTimeout(touchHideTimer);
+        }
         wrapper.removeEventListener("mousemove", onMouseMove);
         wrapper.removeEventListener("mouseleave", onMouseLeave);
+        wrapper.removeEventListener("pointerdown", onPointerDown);
+        wrapper.removeEventListener("pointerup", onPointerUp);
         editorElement.removeEventListener("keydown", onKeyDown, { capture: true });
         editorElement.removeEventListener("scroll", onScroll);
         window.removeEventListener("scroll", onScroll);

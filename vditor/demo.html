@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="zh-cmn-Hans">
+
+<head>
+    <meta charset="utf-8">
+    <title>Vditor Demo</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="./dist/index.css">
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            background: linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+        #vditor {
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+        }
+    </style>
+</head>
+
+<body>
+    <div id="vditor"></div>
+    <script src="./dist/index.min.js"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            try {
+                var vditor = new Vditor("vditor", {
+                    height: 600,
+                    outline: { enable: true },
+                    cache: { enable: false },
+                    cdn: ".",
+                    mode: "wysiwyg",
+                    value: "# Hello Vditor\n\n这是一个 **Vditor** 示例页面。\n\n## 功能演示\n\n- **粗体** / *斜体* / ~~删除线~~\n- `行内代码`\n- [链接](https://github.com)\n\n```javascript\nconsole.log('Hello World');\n```\n\n> 引用内容\n\n| 列1 | 列2 | 列3 |\n|-----|-----|-----|\n| A   | B   | C   |\n",
+                });
+            } catch(e) {
+                console.error("Vditor init error:", e);
+                document.getElementById("vditor").innerHTML = "<p style='color:red;padding:20px'>初始化失败: " + e.message + "</p>";
+            }
+        });
+    </script>
+</body>
+
+</html>
