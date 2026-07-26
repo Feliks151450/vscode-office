@@ -249,6 +249,11 @@ const checkSelection = (vditor: IVditor) => {
         return;
     }
 
+    // 右键菜单打开时禁止显示气泡菜单
+    if ((vditor as IVditor & { _contextMenuOpen?: boolean })._contextMenuOpen) {
+        return;
+    }
+
     const range = selection.getRangeAt(0);
     const isEditor = selectIsEditor(vditor.wysiwyg.element);
     if (!isEditor) {

@@ -7,9 +7,28 @@ const CONTEXT_MENU_VISIBLE_CLASS = "vditor-contextmenu--visible";
 interface IContextMenuState {
     element: HTMLElement;
     visible: boolean;
+    editorElement: HTMLElement;
 }
 
 const menuMap = new WeakMap<IVditor, IContextMenuState>();
+
+const FORMAT_ITEMS = [
+    { name: "bold", label: "加粗" },
+    { name: "italic", label: "斜体" },
+    { name: "strike", label: "删除线" },
+    { name: "h1", label: "标题 1" },
+    { name: "h2", label: "标题 2" },
+    { name: "inline-code", label: "行内代码" },
+    { name: "code", label: "代码块" },
+    { name: "quote", label: "引用" },
+    { name: "list", label: "无序列表" },
+    { name: "ordered-list", label: "有序列表" },
+    { name: "link", label: "插入链接" },
+    { name: "upload", label: "插入图片" },
+    { name: "line", label: "分割线" },
+    { name: "copy", label: "复制" },
+    { name: "cut", label: "剪切" },
+];
 
 const clickToolbarButton = (vditor: IVditor, name: string) => {
     const toolbarBtn = vditor.toolbar.elements?.[name]?.firstElementChild as HTMLElement;
@@ -18,58 +37,63 @@ const clickToolbarButton = (vditor: IVditor, name: string) => {
     }
 };
 
-const buildMenuHTML = (): string => {
-    const iconBold = "<b>B</b>";
-    const iconItalic = "<i>I</i>";
-    const iconStrike = "<s>S</s>";
-    const iconH1 = "<b>H1</b>";
-    const iconH2 = "<b>H2</b>";
-    const iconCode = '<code>&lt;/&gt;</code>';
-    const iconQuote = '<b>"</b>';
-    const iconUL = "<b>&#8226;</b>";
-    const iconOL = "<b>1.</b>";
-    const iconLink = "<b>&#128279;</b>";
-    const iconImage = "<b>&#127912;</b>";
-    const iconHR = "<b>&mdash;</b>";
-    const iconCopy = "<b>&#128203;</b>";
-    const iconCut = "<b>&#9986;</b>";
+const insertLink = (vditor: IVditor) => {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) return;
+    const range = selection.getRangeAt(0);
+    if (range.collapsed) return;
 
-    return [
-        '<div class="vditor-contextmenu__group-label">文本格式</div>',
-        menuItem("bold", iconBold, "加粗"),
-        menuItem("italic", iconItalic, "斜体"),
-        menuItem("strike", iconStrike, "删除线"),
-        '<div class="vditor-contextmenu__divider"></div>',
-        menuItem("h1", iconH1, "标题 1"),
-        menuItem("h2", iconH2, "标题 2"),
-        '<div class="vditor-contextmenu__divider"></div>',
-        menuItem("inline-code", iconCode, "行内代码"),
-        menuItem("code", iconCode, "代码块"),
-        menuItem("quote", iconQuote, "引用"),
-        '<div class="vditor-contextmenu__divider"></div>',
-        menuItem("list", iconUL, "无序列表"),
-        menuItem("ordered-list", iconOL, "有序列表"),
-        '<div class="vditor-contextmenu__divider"></div>',
-        menuItem("link", iconLink, "插入链接"),
-        menuItem("upload", iconImage, "插入图片"),
-        menuItem("line", iconHR, "分割线"),
-        '<div class="vditor-contextmenu__divider"></div>',
-        menuItem("copy", iconCopy, "复制"),
-        menuItem("cut", iconCut, "剪切"),
-    ].join("");
-};
+    const selectedText = selection.toString();
 
-const menuItem = (action: string, icon: string, label: string): string => {
-    return '<div class="vditor-contextmenu__item" data-menu-action="' + action + '">' +
-        '<span class="vditor-contextmenu__item-icon">' + icon + '</span>' +
-        '<span class="vditor-contextmenu__item-label">' + label + '</span>' +
-        "</div>";
+    const a = document.createElement("a");
+    a.href = "";
+    a.textContent = selectedText;
+    range.deleteContents();
+    range.insertNode(a);
+
+    const newRange = document.createRange();
+    newRange.selectNodeContents(a);
+    selection.removeAllRanges();
+    selection.addRange(newRange);
+
+    const popover = vditor.wysiwyg.popover;
+    if (popover) {
+        popover.style.display = "block";
+        const hrefInput = popover.querySelector(".vditor-link-popover__href") as HTMLInputElement;
+        if (hrefInput) {
+            hrefInput.focus();
+        }
+    }
 };
 
 const createContextMenuElement = (vditor: IVditor): HTMLElement => {
     const menu = document.createElement("div");
     menu.className = CONTEXT_MENU_CLASS;
-    menu.innerHTML = buildMenuHTML();
+
+    FORMAT_ITEMS.forEach((item) => {
+        const btn = document.createElement("div");
+        btn.type = "button";
+        btn.className = `${CONTEXT_MENU_CLASS}__item`;
+        btn.setAttribute("data-menu-action", item.name);
+        btn.innerHTML = '<span class="vditor-contextmenu__item-label">' + item.label + '</span>';
+        btn.addEventListener("mousedown", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (item.name === "link") {
+                insertLink(vditor);
+            } else {
+                clickToolbarButton(vditor, item.name);
+            }
+            hideContextMenu(vditor);
+        });
+        menu.appendChild(btn);
+    });
+
+    menu.addEventListener("contextmenu", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+    });
+
     document.body.appendChild(menu);
     return menu;
 };
@@ -95,7 +119,12 @@ const positionContextMenu = (menu: HTMLElement, x: number, y: number) => {
 
 const showContextMenu = (vditor: IVditor, menu: HTMLElement, x: number, y: number) => {
     const state = menuMap.get(vditor);
-    if (!state) return;
+    if (!state) {
+        return;
+    }
+
+    // 标记右键菜单已打开，阻止气泡菜单显示
+    (vditor as IVditor & { _contextMenuOpen?: boolean })._contextMenuOpen = true;
 
     positionContextMenu(menu, x, y);
     menu.offsetHeight;
@@ -111,41 +140,6 @@ const hideContextMenu = (vditor: IVditor) => {
     state.visible = false;
 };
 
-const executeAction = (vditor: IVditor, action: string) => {
-    vditor.wysiwyg.element.focus();
-
-    if (action === "h1" || action === "h2") {
-        const level = action === "h1" ? 1 : 2;
-        const range = getEditorRange(vditor);
-        const block = range.startContainer.parentElement;
-        if (block) {
-            const prefix = "#".repeat(level) + " ";
-            const currentText = block.textContent || "";
-            if (currentText.startsWith(prefix)) {
-                block.textContent = currentText.substring(prefix.length);
-            } else {
-                const cleaned = currentText.replace(/^#{1,6}\s/, "");
-                block.textContent = prefix + cleaned;
-            }
-            afterRenderEvent(vditor);
-        }
-        return;
-    }
-
-    clickToolbarButton(vditor, action);
-
-    if (action === "code") {
-        const range = getEditorRange(vditor);
-        if (range.startContainer.nodeType === 3) {
-            const text = range.startContainer.textContent || "";
-            const parent = range.startContainer.parentElement;
-            if (parent && parent.tagName === "PRE") {
-                afterRenderEvent(vditor);
-            }
-        }
-    }
-};
-
 export const initContextMenu = (vditor: IVditor, editorElement: HTMLElement) => {
     if (menuMap.has(vditor)) {
         return;
@@ -156,44 +150,35 @@ export const initContextMenu = (vditor: IVditor, editorElement: HTMLElement) => 
     const state: IContextMenuState = {
         element,
         visible: false,
+        editorElement,
     };
     menuMap.set(vditor, state);
 
     editorElement.addEventListener("contextmenu", (e: MouseEvent) => {
-        if (!selectIsEditor(editorElement)) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        if (!vditor.wysiwyg?.element) {
+            return;
+        }
+        if (!selectIsEditor(vditor.wysiwyg.element)) {
             return;
         }
 
-        e.preventDefault();
-        e.stopPropagation();
-
-        const range = getEditorRange(vditor);
         showContextMenu(vditor, element, e.clientX, e.clientY);
-    });
-
-    element.addEventListener("contextmenu", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
     });
 
     document.addEventListener("mousedown", (e) => {
         if (!element.contains(e.target)) {
             hideContextMenu(vditor);
+            // 延迟清空标志位，确保 mouseup → checkSelection 能读到
+            setTimeout(() => {
+                (vditor as IVditor & { _contextMenuOpen?: boolean })._contextMenuOpen = false;
+            }, 200);
         }
     });
 
-    element.addEventListener("click", (e) => {
-        const item = (e.target as HTMLElement).closest("[data-menu-action]");
-        if (!item) return;
-
-        const action = item.getAttribute("data-menu-action");
-        if (action) {
-            executeAction(vditor, action);
-            hideContextMenu(vditor);
-        }
-    });
-
-    window.addEventListener("scroll", () => {
+    document.addEventListener("scroll", () => {
         if (state.visible) {
             hideContextMenu(vditor);
         }

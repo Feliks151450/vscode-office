@@ -1,12 +1,12 @@
-import { cpSync, existsSync, mkdirSync } from "fs";
+import { cpSync, existsSync, mkdirSync, readFileSync } from "fs";
 import { resolve } from "path";
 import { defineConfig, type Plugin } from "vite";
-import { viteStaticCopy } from "vite-plugin-static-copy";
 import pkg from "./package.json";
 
 const resourceMarkdownDir = resolve(__dirname, "../resource/markdown");
 const localLuteDir = resolve(__dirname, "../test/output/lute");
 const resourceLuteDir = resolve(resourceMarkdownDir, "dist/js/lute");
+const staticBase = resolve(__dirname, "src");
 
 function copyLocalLuteOverride() {
   if (!existsSync(localLuteDir)) {
@@ -44,7 +44,7 @@ export default defineConfig(({ mode }) => {
     },
     build: {
       outDir: "dist",
-      cssMinify: 'esbuild',
+      cssMinify: "esbuild",
       minify: mode === "production",
       target: "es2015",
       lib: {
@@ -61,12 +61,41 @@ export default defineConfig(({ mode }) => {
       },
     },
     plugins: [
-      viteStaticCopy({
-        targets: [
-          { src: "src/css", dest: ".", rename: { stripBase: 1 } },
-          { src: "src/js", dest: ".", rename: { stripBase: 1 } },
-        ],
-      }),
+      {
+        name: "serve-vditor-static",
+        enforce: "pre",
+        configureServer(server) {
+          server.middlewares.use((req, res, next) => {
+            const url = req.url || "";
+            const prefixes = ["/dist/js/i18n/", "/dist/css/", "/dist/js/lute/"];
+            if (!prefixes.some((p) => url.startsWith(p))) {
+              return next();
+            }
+            const relativePath = url.replace(/^\/dist\//, "");
+            const filePath = resolve(staticBase, relativePath);
+            if (!existsSync(filePath) || !filePath.startsWith(staticBase)) {
+              res.statusCode = 404;
+              res.end("Not found");
+              return;
+            }
+            try {
+              const data = readFileSync(filePath);
+              const ext = filePath.split(".").pop();
+              const mime: Record<string, string> = {
+                js: "application/javascript",
+                css: "text/css",
+                map: "application/json",
+              };
+              res.setHeader("Content-Type", mime[ext || ""] || "application/octet-stream");
+              res.setHeader("Cache-Control", "no-cache");
+              res.end(data);
+            } catch {
+              res.statusCode = 404;
+              res.end("Not found");
+            }
+          });
+        },
+      },
       copyBuildToResource(),
     ],
   };

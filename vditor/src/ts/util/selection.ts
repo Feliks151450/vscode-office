@@ -4,20 +4,33 @@ import { adjustEditorScrollBy } from "./documentState";
 import { hasClosestBlock, hasClosestByClassName, hasClosestByMatchTag } from "./hasClosest";
 
 export const getEditorRange = (vditor: IVditor) => {
+    if (!vditor) {
+        const range = document.createRange();
+        range.setStart(document.body, 0);
+        range.collapse(true);
+        return range;
+    }
+    const mode = vditor.currentMode;
+    const editor = vditor[mode];
+    if (!editor?.element) {
+        const range = document.createRange();
+        range.setStart(document.body, 0);
+        range.collapse(true);
+        return range;
+    }
     let range: Range;
-    const element = vditor[vditor.currentMode].element;
     if (getSelection().rangeCount > 0) {
         range = getSelection().getRangeAt(0);
-        if (element.isEqualNode(range.startContainer) || element.contains(range.startContainer)) {
+        if (editor.element.isEqualNode(range.startContainer) || editor.element.contains(range.startContainer)) {
             return range;
         }
     }
-    if (vditor[vditor.currentMode].range) {
-        return vditor[vditor.currentMode].range;
+    if (vditor[mode].range) {
+        return vditor[mode].range;
     }
-    element.focus({ preventScroll: true });
-    range = element.ownerDocument.createRange();
-    range.setStart(element, 0);
+    editor.element.focus({ preventScroll: true });
+    range = editor.element.ownerDocument.createRange();
+    range.setStart(editor.element, 0);
     range.collapse(true);
     return range;
 };
@@ -246,20 +259,28 @@ export const getCursorPosition = (editor: HTMLElement) => {
 };
 
 export const selectIsEditor = (editor: HTMLElement, range?: Range) => {
+    if (!editor) {
+        return false;
+    }
     const activeElement = document.activeElement;
     if (activeElement && editor.contains(activeElement)) {
         return true;
     }
     if (!range) {
-        if (getSelection().rangeCount === 0) {
-            return false;
-        } else {
+        try {
+            if (getSelection().rangeCount === 0) {
+                return false;
+            }
             range = getSelection().getRangeAt(0);
+        } catch {
+            return false;
         }
     }
     const container = range.commonAncestorContainer;
-
-    return editor.isEqualNode(container) || editor.contains(container);
+    if (!container) {
+        return false;
+    }
+    return editor.isEqualNode(container) || editor.contains(container as Node);
 };
 
 const getObsidianTagSourceElement = (tag: HTMLElement): HTMLElement | null => {

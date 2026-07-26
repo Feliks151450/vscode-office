@@ -6,6 +6,7 @@ node_modules
 *.vsix
 package-lock.json
 .DS_Store
+.claude
 bun.lock
 yarn.lock
 pnpm-lock.yaml
