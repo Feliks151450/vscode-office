@@ -35,6 +35,7 @@ import {expandMarkerWithMathSync} from "./expandMarkerSync";
 import {handleHtmlEditorAltEnter} from "../htmlInline/htmlInlineEditor";
 import {handleLinkPopoverAltEnter} from "../wysiwyg/highlightToolbarWYSIWYG";
 import {processAfterRender, processHeading} from "./process";
+import {skipZwspAfterInlineMath} from "../math/inlineMathCodeMirror";
 
 export const processKeydown = (vditor: IVditor, event: KeyboardEvent) => {
     vditor.ir.composingLock = event.isComposing;
@@ -61,6 +62,11 @@ export const processKeydown = (vditor: IVditor, event: KeyboardEvent) => {
             }
         }
         return false;
+    }
+
+    // 公式后 ZWSP：输入前先跳过，避免光标在 ZWSP 开头时字符跑到行首
+    if (event.key.length === 1 || event.key === "Enter" || event.key === "Backspace" || event.key === "Delete") {
+        skipZwspAfterInlineMath(getEditorRange(vditor), vditor);
     }
 
     // 添加第一次记录 undo 的光标
@@ -204,6 +210,20 @@ export const processKeydown = (vditor: IVditor, event: KeyboardEvent) => {
             return true;
         }
     }
+
+    // shift+enter：段落内硬换行（\n + ZWSP）；table 由上方 fixTable 处理
+    // 段末仅插 \n 时 pre-wrap 下光标不换行，需 ZWSP 占位 https://github.com/Vanessa219/vditor/issues/170
+    if (!isCtrl(event) && event.shiftKey && !event.altKey && event.key === "Enter" && !headingElement) {
+        const textNode = document.createTextNode("\n" + Constants.ZWSP);
+        range.insertNode(textNode);
+        range.setStart(textNode, 1);
+        range.collapse(true);
+        setSelectionFocus(range);
+        processAfterRender(vditor);
+        event.preventDefault();
+        return true;
+    }
+
     const blockElement = hasClosestBlock(startContainer);
     if (event.key === "Backspace" && !isCtrl(event) && !event.shiftKey && !event.altKey && range.toString() === "") {
         if (fixDelete(vditor, range, event, pElement)) {
