@@ -222,8 +222,8 @@
       --vditor-popover-secondary-btn-bg: color-mix(in srgb, var(--textarea-text-color) 10%, transparent);
       --vditor-popover-secondary-btn-bg-hover: color-mix(in srgb, var(--textarea-text-color) 16%, transparent);
       opacity: 1;
-      min-width: 320px;
-      max-width: min(520px, calc(100vw - 24px));
+      min-width: 200px;
+      max-width: min(380px, calc(100vw - 24px));
       max-height: min(400px, calc(100vh - 24px));
       padding: 10px 12px;
       border: 1px solid color-mix(in srgb, var(--toolbar-icon-color) 22%, transparent);
@@ -234,6 +234,92 @@
       white-space: normal;
       overflow: hidden;
       box-sizing: border-box;
+
+      .vditor-html-inline-popover__mode-tabs {
+        display: flex;
+        gap: 2px;
+        padding: 4px 0 8px;
+        margin-bottom: 4px;
+        border-bottom: 1px solid color-mix(in srgb, var(--toolbar-icon-color) 10%, transparent);
+      }
+
+      .vditor-html-inline-popover__tab {
+        padding: 3px 12px;
+        border: none;
+        border-radius: 5px;
+        background: transparent;
+        color: var(--toolbar-icon-color);
+        font-size: 12px;
+        font-family: inherit;
+        cursor: pointer;
+        transition: background 0.12s ease, color 0.12s ease;
+
+        &:hover {
+          background: color-mix(in srgb, var(--toolbar-icon-color) 8%, transparent);
+        }
+
+        &--active {
+          background: color-mix(in srgb, var(--vditor-popover-primary-btn-bg, #007aff) 18%, transparent);
+          color: var(--vditor-popover-primary-btn-bg, #007aff);
+        }
+      }
+
+      .vditor-html-inline-popover__visual-host {
+        min-height: 80px;
+        max-height: 240px;
+        overflow: auto;
+        padding: 8px 10px;
+        margin-bottom: 8px;
+        border-radius: 6px;
+        background: color-mix(in srgb, var(--textarea-text-color) 4%, transparent);
+        font-family: inherit;
+        font-size: 14px;
+        line-height: 1.5;
+        color: var(--textarea-text-color);
+        outline: none;
+        white-space: pre-wrap;
+        word-break: break-word;
+
+        &:focus {
+          box-shadow: 0 0 0 2px color-mix(in srgb, var(--vditor-popover-primary-btn-bg, #007aff) 25%, transparent);
+        }
+      }
+
+      .vditor-html-inline-popover__color-bar {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        padding-bottom: 8px;
+        border-bottom: 1px solid color-mix(in srgb, var(--toolbar-icon-color) 12%, transparent);
+      }
+
+      .vditor-html-inline-popover__color-row {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+
+      .vditor-html-inline-popover__color-label {
+        width: 28px;
+        font-size: 11px;
+        opacity: 0.7;
+        flex-shrink: 0;
+      }
+
+      .vditor-html-inline-popover__color-swatch {
+        width: 18px;
+        height: 18px;
+        padding: 0;
+        border: 1px solid color-mix(in srgb, var(--toolbar-icon-color) 25%, transparent);
+        border-radius: 3px;
+        cursor: pointer;
+        transition: transform 0.08s ease, box-shadow 0.08s ease;
+
+        &:hover {
+          transform: scale(1.15);
+          box-shadow: 0 0 0 2px color-mix(in srgb, var(--toolbar-icon-hover-color, #4285f4) 40%, transparent);
+        }
+      }
 
       .vditor-html-inline-popover__actions {
         display: flex;
@@ -259,13 +345,14 @@
         padding: 2px 4px;
         user-select: none;
         pointer-events: none;
+        display: none;
       }
 
       .vditor-html-inline-popover__button {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        min-width: 64px;
+        min-width: 50px;
         padding: 5px 14px;
         border-radius: 7px;
         font-size: 12px;
@@ -322,6 +409,16 @@
           &.vditor-html-inline-popover__button--wrap-active {
             background: color-mix(in srgb, var(--vditor-popover-primary-btn-bg) 16%, transparent);
             color: var(--vditor-popover-primary-btn-bg);
+          }
+        }
+
+        &--clear {
+          // 默认低饱和度——只是"剥属性"操作，不是删内容；hover 时才显示破坏性暗示
+          color: color-mix(in srgb, var(--toolbar-icon-color, #586069) 90%, transparent);
+
+          &:hover {
+            background: color-mix(in srgb, #dc2626 12%, transparent);
+            color: #dc2626;
           }
         }
       }

@@ -90,8 +90,9 @@
 
 <body>
     <div id="vditor"></div>
-    <script src="./dist/index.min.js"></script>
-    <script>
+    <script type="module">
+        import Vditor from "/src/index.ts";
+
         document.addEventListener("DOMContentLoaded", function() {
             try {
                 var vditor = new Vditor("vditor", {
@@ -100,8 +101,10 @@
                     cache: { enable: false },
                     cdn: ".",
                     mode:"wysiwyg",
-                    value: "# Hello Vditor\n\n这是一个 **Vditor** 示例页面。\n\n## 功能演示\n\n- **粗体** / *斜体* / ~~删除线~~\n- `行内代码`\n- [链接](https://github.com)\n\n```javascript\nconsole.log('Hello World');\n```\n\n> 引用内容\n\n| 列1 | 列2 | 列3 |\n|-----|-----|-----|\n| A   | B   | C   |\n",
+                    value: "# Hello Vditor\n\n这是一个 **Vditor** 示例<span style='color:red'>页面</span>。\n\n## 功能演示\n\n- **粗体** / *斜体* / ~~删除线~~\n- `行内代码`\n- [链接](https://github.com)\n\n```javascript\nconsole.log('Hello World');\n```\n\n> 引用内容\n\n| 列1 | 列2 | 列3 |\n|-----|-----|-----|\n| A   | B   | C   |\n",
                 });
+                // 挂到全局，方便在控制台调试：window.vditor.getValue() / window.vditor.getHTML()
+                window.vditor = vditor;
             } catch(e) {
                 console.error("Vditor init error:", e);
                 document.getElementById("vditor").innerHTML = "<p style='color:red;padding:20px'>初始化失败: " + e.message + "</p>";

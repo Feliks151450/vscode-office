@@ -40,6 +40,73 @@
       background: color-mix(in srgb, var(--toolbar-icon-color, #586069) 10%, transparent);
       color: var(--toolbar-icon-hover-color, #4285f4);
     }
+
+    &--active {
+      background: color-mix(in srgb, var(--toolbar-icon-hover-color, #4285f4) 18%, transparent);
+      color: var(--toolbar-icon-hover-color, #4285f4);
+    }
+  }
+}
+
+.vditor-bubble-palette {
+  position: absolute;
+  z-index: 10002;
+  display: none;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  background: var(--panel-background-color, #fff);
+  border: 1px solid color-mix(in srgb, var(--toolbar-icon-color, #586069) 18%, transparent);
+  border-radius: 8px;
+  box-shadow:
+    0 4px 16px color-mix(in srgb, #000 18%, transparent),
+    0 1px 4px color-mix(in srgb, #000 10%, transparent);
+
+  &--visible {
+    display: flex;
+  }
+
+  &__row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  &__title {
+    width: 32px;
+    font-size: 11px;
+    color: var(--toolbar-icon-color, #586069);
+    opacity: 0.7;
+  }
+
+  &__swatch {
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    border: 1px solid color-mix(in srgb, var(--toolbar-icon-color, #586069) 25%, transparent);
+    border-radius: 3px;
+    cursor: pointer;
+    transition: transform 0.08s ease, box-shadow 0.08s ease;
+
+    &:hover {
+      transform: scale(1.15);
+      box-shadow: 0 0 0 2px color-mix(in srgb, var(--toolbar-icon-hover-color, #4285f4) 40%, transparent);
+    }
+  }
+
+  &__clear {
+    align-self: flex-end;
+    padding: 2px 8px;
+    border: 1px solid color-mix(in srgb, var(--toolbar-icon-color, #586069) 20%, transparent);
+    border-radius: 4px;
+    background: transparent;
+    color: var(--toolbar-icon-color, #586069);
+    font-size: 11px;
+    cursor: pointer;
+
+    &:hover {
+      background: color-mix(in srgb, var(--toolbar-icon-color, #586069) 8%, transparent);
+    }
   }
 }
 

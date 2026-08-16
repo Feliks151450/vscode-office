@@ -24,6 +24,40 @@
 🔥 欢迎观摩我们的另一个开源项目 <a href="https://github.com/siyuan-note/siyuan">思源笔记</a>
 <p>
 
+## 🚀 本地开发（vscode-office 集成版）
+
+> 本目录是基于上游 Vditor 定制后的 `vscode-vditor`（v4.x），作为 [vscode-office](../) 的 Markdown 编辑器使用。下面的命令与 README 后半段描述的上游 Vditor 默认流程不同，请以本节为准。
+
+### 环境要求
+
+* Node.js LTS
+
+### 安装与启动
+
+```bash
+cd vditor
+npm install          # 首次安装依赖（vditor/node_modules 当前为空时执行）
+npm run dev          # 启动 Vite 开发服务器
+```
+
+启动后浏览器访问 **http://127.0.0.1:3135**（端口在 [`vite.config.ts`](vite.config.ts) 中定义，非上游默认的 9000）。
+
+### 其它脚本
+
+| 命令 | 作用 |
+| --- | --- |
+| `npm run dev` | 启动 Vite 开发服务器（端口 3135），支持热更新 |
+| `npm run build:dev` | 开发模式构建：产物输出到 `vditor/dist/`，同时拷贝到 `../resource/markdown/dist/` 供主扩展使用 |
+| `npm run build` | 生产模式构建：压缩并输出单文件 `index.min.js` / `index.css` |
+| `npm run lint` | 对 `src/**/*.ts` 运行 ESLint 自动修复 |
+
+### 调试小贴士
+
+* 直接修改 `vditor/src/**` 下的源文件，Vite 会热更新。
+* 编辑器扩展运行时实际加载的是 `../resource/markdown/dist/` 下的产物；`npm run build` / `npm run build:dev` 会自动同步过去。
+* 如果本地有 `../test/output/lute/`，构建时会优先使用其中的 Lute 引擎覆盖到 `../resource/markdown/dist/js/lute/`，方便调试 Markdown 解析。
+* Vite dev server 内置中间件会把 `/dist/js/i18n/`、`/dist/css/`、`/dist/js/lute/` 代理到 `vditor/src/` 下对应的源文件，便于断点调试。
+
 ## 💡 简介
 
 [Vditor](https://b3log.org/vditor) 是一款浏览器端的 Markdown 编辑器，支持所见即所得、即时渲染（类似 Typora）和分屏预览模式。它使用 TypeScript 实现，支持原生 JavaScript 以及 Vue、React、Angular 和 Svelte 等框架。
