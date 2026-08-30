@@ -5,7 +5,7 @@ import {genAPopover, highlightToolbarWYSIWYG} from "./highlightToolbarWYSIWYG";
 import {getModePopover} from "../codeBlock/codeBlockLanguagePopover";
 import {afterRenderEvent} from "./afterRenderEvent";
 import {setSelectionColor} from "./setSelectionColor";
-import {TEXT_COLORS, BG_COLORS} from "../util/colorPalette";
+import {resolveTextColors, resolveBgColors} from "../util/colorPalette";
 import {wrapSelectionWithHtmlInline} from "../htmlInline/htmlInlineEditor";
 
 const BUBBLE_MENU_CLASS = "vditor-bubble-menu";
@@ -25,6 +25,8 @@ interface IBubblePaletteState {
     element: HTMLElement;
     visible: boolean;
     anchorButton: HTMLElement | null;
+    renderText: (colors: readonly string[]) => void;
+    renderBg: (colors: readonly string[]) => void;
 }
 
 const menuMap = new WeakMap<IVditor, IBubbleMenuState>();
@@ -213,15 +215,22 @@ const createBubbleMenuElement = (vditor: IVditor): HTMLElement => {
         menu.appendChild(btn);
     });
 
-    document.body.appendChild(menu);
+    // 不挂到 body：initUI 会重置 vditor.element.innerHTML，且 body 下继承不到
+    // vditor 根元素上的主题变量（--panel-background-color 等），深色模式会失效。
+    // 首次显示时由 showBubbleMenu 挂到 vditor.element 内。
     return menu;
 };
 
-const createColorPaletteElement = (vditor: IVditor): HTMLElement => {
+const createColorPaletteElement = (vditor: IVditor): {
+    element: HTMLElement;
+    renderText: (colors: readonly string[]) => void;
+    renderBg: (colors: readonly string[]) => void;
+} => {
     const palette = document.createElement("div");
     palette.className = BUBBLE_PALETTE_CLASS;
 
-    const buildRow = (label: string, swatches: string[], apply: (color: string) => void) => {
+    /** 构建一行（标题 + 可重绘的色块区），render 在每次显示时用最新颜色数组重绘色块 */
+    const buildRow = (label: string, apply: (color: string) => void) => {
         const row = document.createElement("div");
         row.className = `${BUBBLE_PALETTE_CLASS}__row`;
         const titleEl = document.createElement("span");
@@ -229,23 +238,26 @@ const createColorPaletteElement = (vditor: IVditor): HTMLElement => {
         titleEl.textContent = label;
         row.appendChild(titleEl);
 
-        swatches.forEach(color => {
-            const sw = document.createElement("button");
-            sw.type = "button";
-            sw.className = `${BUBBLE_PALETTE_CLASS}__swatch`;
-            sw.style.backgroundColor = color;
-            sw.setAttribute("aria-label", color);
-            sw.setAttribute("data-color", color);
-            sw.addEventListener("mousedown", (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                apply(color);
-                hideColorPalette(vditor);
-                hideBubbleMenu(vditor);
+        const render = (colors: readonly string[]) => {
+            row.querySelectorAll(`.${BUBBLE_PALETTE_CLASS}__swatch`).forEach((el) => el.remove());
+            colors.forEach(color => {
+                const sw = document.createElement("button");
+                sw.type = "button";
+                sw.className = `${BUBBLE_PALETTE_CLASS}__swatch`;
+                sw.style.backgroundColor = color;
+                sw.setAttribute("aria-label", color);
+                sw.setAttribute("data-color", color);
+                sw.addEventListener("mousedown", (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    apply(color);
+                    hideColorPalette(vditor);
+                    hideBubbleMenu(vditor);
+                });
+                row.appendChild(sw);
             });
-            row.appendChild(sw);
-        });
-        return row;
+        };
+        return { row, render };
     };
 
     const clearBtn = document.createElement("button");
@@ -261,18 +273,22 @@ const createColorPaletteElement = (vditor: IVditor): HTMLElement => {
     });
     palette.appendChild(clearBtn);
 
-    const textRow = buildRow("文字", TEXT_COLORS, (color) => {
+    const textRow = buildRow("文字", (color) => {
         setSelectionColor(vditor, { color });
     });
-    palette.appendChild(textRow);
+    palette.appendChild(textRow.row);
 
-    const bgRow = buildRow("背景", BG_COLORS, (color) => {
+    const bgRow = buildRow("背景", (color) => {
         setSelectionColor(vditor, { backgroundColor: color });
     });
-    palette.appendChild(bgRow);
+    palette.appendChild(bgRow.row);
 
-    document.body.appendChild(palette);
-    return palette;
+    // 同气泡菜单：首次显示时由 showColorPalette 挂到 vditor.element 内
+    return {
+        element: palette,
+        renderText: textRow.render,
+        renderBg: bgRow.render,
+    };
 };
 
 const positionBubbleMenu = (menu: HTMLElement, range: Range) => {
@@ -298,6 +314,11 @@ const showBubbleMenu = (vditor: IVditor, range: Range) => {
     const state = menuMap.get(vditor);
     if (!state) {
         return;
+    }
+
+    if (!state.element.isConnected) {
+        // 挂到 vditor 根元素内，继承主题变量（深色模式下 --panel-background-color 等为深色值）
+        vditor.element.appendChild(state.element);
     }
 
     if (state.hideTimer !== null) {
@@ -333,6 +354,15 @@ const showColorPalette = (
 ) => {
     const state = paletteMap.get(vditor);
     if (!state) return;
+
+    if (!state.element.isConnected) {
+        // 同气泡菜单：挂到 vditor 根元素内继承主题变量
+        vditor.element.appendChild(state.element);
+    }
+
+    // 每次显示时重绘色块，读取最新的 window.TEXT_COLORS / window.BG_COLORS
+    state.renderText(resolveTextColors());
+    state.renderBg(resolveBgColors());
 
     state.anchorButton = anchorButton;
     state.element.classList.add(BUBBLE_PALETTE_VISIBLE_CLASS);
@@ -487,12 +517,14 @@ export const initBubbleMenu = (vditor: IVditor, editorElement: HTMLElement) => {
     menuMap.set(vditor, state);
 
     // 调色板状态
-    const paletteElement = createColorPaletteElement(vditor);
+    const paletteResult = createColorPaletteElement(vditor);
     paletteMap.set(vditor, {
-        element: paletteElement,
+        element: paletteResult.element,
         visible: false,
         kind: null,
         anchorButton: null,
+        renderText: paletteResult.renderText,
+        renderBg: paletteResult.renderBg,
     });
 
     document.addEventListener("selectionchange", () => {

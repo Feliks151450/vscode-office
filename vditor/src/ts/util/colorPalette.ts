@@ -16,12 +16,33 @@ export const TEXT_COLORS: readonly string[] = [
 ];
 
 export const BG_COLORS: readonly string[] = [
-    "#fef2f2", // red-50
-    "#fff7ed", // orange-50
-    "#fefce8", // yellow-50
-    "#f0fdf4", // green-50
-    "#eff6ff", // blue-50
-    "#f5f3ff", // violet-50
-    "#f1f5f9", // slate-100
-    "#fafafa", // neutral-50
+    "#fecaca", // red-200
+    "#fed7aa", // orange-200
+    "#fde68a", // yellow-200
+    "#bbf7d0", // green-200
+    "#bfdbfe", // blue-200
+    "#ddd6fe", // violet-200
+    "#cbd5e1", // slate-300
+    "#d6d3d1", // stone-300
 ];
+
+declare global {
+    interface Window {
+        /** 自定义文字预设色数组，覆盖内置 TEXT_COLORS；每次显示调色板时读取 */
+        TEXT_COLORS?: readonly string[];
+        /** 自定义背景预设色数组，覆盖内置 BG_COLORS；每次显示调色板时读取 */
+        BG_COLORS?: readonly string[];
+    }
+}
+
+/** 读取最新的文字预设色：window.TEXT_COLORS 未设置（或为空数组）时用内置默认值 */
+export const resolveTextColors = (): readonly string[] => {
+    const custom = window.TEXT_COLORS;
+    return Array.isArray(custom) && custom.length > 0 ? custom : TEXT_COLORS;
+};
+
+/** 读取最新的背景预设色：window.BG_COLORS 未设置（或为空数组）时用内置默认值 */
+export const resolveBgColors = (): readonly string[] => {
+    const custom = window.BG_COLORS;
+    return Array.isArray(custom) && custom.length > 0 ? custom : BG_COLORS;
+};

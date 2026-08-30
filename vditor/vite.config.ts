@@ -67,7 +67,7 @@ export default defineConfig(({ mode }) => {
         configureServer(server) {
           server.middlewares.use((req, res, next) => {
             const url = req.url || "";
-            const prefixes = ["/dist/js/i18n/", "/dist/css/", "/dist/js/lute/"];
+            const prefixes = ["/dist/js/i18n/", "/dist/css/", "/dist/js/lute/", "/dist/js/mathjax/"];
             if (!prefixes.some((p) => url.startsWith(p))) {
               return next();
             }

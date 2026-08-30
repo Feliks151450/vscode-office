@@ -19,7 +19,7 @@ import {
 import { afterRenderEvent } from "../wysiwyg/afterRenderEvent";
 import { processAfterRender } from "../ir/process";
 import { telemetry } from "../util/telemetry";
-import { TEXT_COLORS, BG_COLORS } from "../util/colorPalette";
+import { resolveTextColors, resolveBgColors } from "../util/colorPalette";
 
 const HTML_EDITOR_POPOVER_CLASS = "vditor-popover--html-inline";
 const HTML_EDITOR_PANEL_CLASS = "vditor-panel--html-inline";
@@ -902,14 +902,14 @@ export const showHtmlEditorPopover = (vditor: IVditor, target: HtmlEditTarget) =
         return row;
     };
 
-    colorBar.appendChild(buildColorRow("文字", TEXT_COLORS, (color) => {
+    colorBar.appendChild(buildColorRow("文字", resolveTextColors(), (color) => {
         if (currentMode === "raw") {
             applyStyleToSource({ color });
         } else {
             applyStyleInPreview({ color });
         }
     }));
-    colorBar.appendChild(buildColorRow("背景", BG_COLORS, (color) => {
+    colorBar.appendChild(buildColorRow("背景", resolveBgColors(), (color) => {
         if (currentMode === "raw") {
             applyStyleToSource({ backgroundColor: color });
         } else {

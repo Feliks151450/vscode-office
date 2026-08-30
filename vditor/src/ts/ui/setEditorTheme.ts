@@ -20,6 +20,9 @@ import {
 const LEGACY_THEME_LINK_ID = "vditor-editor-theme-css";
 
 let vscodeThemeObserverStarted = false;
+let systemColorSchemeObserverStarted = false;
+// matchMedia 监听只注册一次；回调里读取最新的实例，避免多实例/销毁重建后指向旧 vditor
+let systemThemeVditor: IVditor | null = null;
 
 const isVscodeDarkTheme = () => {
     const kind = document.body.getAttribute("data-vscode-theme-kind");
@@ -46,6 +49,12 @@ const resolveStoredManualTheme = (
 export const syncEditorDarkClass = (element: HTMLElement, theme: string) => {
     const useDark = theme === "Auto" ? isVscodeDarkTheme() : EDITOR_DARK_THEMES.has(theme);
     element.classList.toggle("vditor--dark", useDark);
+    if (window.vditorDebug) {
+        console.log("[vditor theme] syncEditorDarkClass theme=", theme, "useDark=", useDark,
+            "vscode-kind=", document.body.getAttribute("data-vscode-theme-kind"),
+            "prefers-dark=", window.matchMedia("(prefers-color-scheme: dark)").matches,
+            "vditor--dark=", element.classList.contains("vditor--dark"));
+    }
 };
 
 export const resolvePreferredManualEditorTheme = (vditor: IVditor, preferDark: boolean) => {
@@ -69,6 +78,9 @@ const observeVscodeTheme = (vditor: IVditor) => {
     }
     vscodeThemeObserverStarted = true;
     const observer = new MutationObserver(() => {
+        if (window.vditorDebug) {
+            console.log("[vditor theme] vscode-theme-kind 变化:", document.body.getAttribute("data-vscode-theme-kind"));
+        }
         const theme = vditor.element.getAttribute("data-editor-theme");
         if (theme === "Auto") {
             syncEditorDarkClass(vditor.element, "Auto");
@@ -78,6 +90,45 @@ const observeVscodeTheme = (vditor: IVditor) => {
         }
     });
     observer.observe(document.body, {attributes: true, attributeFilter: ["data-vscode-theme-kind"]});
+};
+
+/** 浏览器环境：监听系统深浅色偏好变化，Auto 模式下自动跟随（VSCode 环境由
+ *  observeVscodeTheme 的 data-vscode-theme-kind 观察覆盖，两者互补）。 */
+const observeSystemColorScheme = (vditor: IVditor) => {
+    systemThemeVditor = vditor;
+    if (systemColorSchemeObserverStarted || typeof window.matchMedia === "undefined") {
+        return;
+    }
+    systemColorSchemeObserverStarted = true;
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+    if (window.vditorDebug) {
+        console.log("[vditor theme] 注册 prefers-color-scheme 监听, 当前 matches=", mediaQuery.matches);
+    }
+    const applyAutoTheme = () => {
+        const current = systemThemeVditor;
+        if (!current) {
+            if (window.vditorDebug) {
+                console.log("[vditor theme] prefers-color-scheme 变化但无 vditor 实例, matches=", mediaQuery.matches);
+            }
+            return;
+        }
+        const attr = current.element.getAttribute("data-editor-theme");
+        if (window.vditorDebug) {
+            console.log("[vditor theme] prefers-color-scheme 变化: matches=", mediaQuery.matches,
+                "data-editor-theme=", attr);
+        }
+        if (attr === "Auto") {
+            syncEditorDarkClass(current.element, "Auto");
+            if (resolveMermaidTheme(current.options) === "Auto") {
+                refreshMermaidTheme(current.element, current.options.cdn, current);
+            }
+        }
+    };
+    if (mediaQuery.addEventListener) {
+        mediaQuery.addEventListener("change", applyAutoTheme);
+    } else {
+        mediaQuery.addListener(applyAutoTheme);
+    }
 };
 
 /** Apply bundled editor theme via data-editor-theme (css bundled in index.css). */
@@ -106,9 +157,15 @@ export const setEditorTheme = (
 
     applyEditorThemeAttribute(vditor, resolved);
     vditor.options.editorTheme = resolved;
+    if (window.vditorDebug) {
+        console.log("[vditor theme] setEditorTheme resolved=", resolved,
+            "data-editor-theme=", vditor.element.getAttribute("data-editor-theme"),
+            "documentElement=", document.documentElement.getAttribute("data-editor-theme"));
+    }
     syncEditorDarkClass(vditor.element, resolved);
     updateEditorThemeToggle(resolved);
     observeVscodeTheme(vditor);
+    observeSystemColorScheme(vditor);
     if (resolveMermaidTheme(vditor.options) === "Auto") {
         refreshMermaidTheme(vditor.element, vditor.options.cdn, vditor);
     }

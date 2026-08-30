@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>LatexEasy Editor</title>
+    <meta charset="UTF-8">
+    <meta name="renderer" content="webkit"/>
+    <!-- color-scheme: 让浏览器原生控件（滚动条 / 表单）也跟随系统主题，深色下不会
+         出现一段亮色控件的违和。latexeasy.css 里的 @media (prefers-color-scheme: dark)
+         负责应用层覆盖。 -->
+    <meta name="color-scheme" content="light dark"/>
+    <link rel="stylesheet" href="latexeasy.css"/>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #ffffff;
+        }
+        /* iframe 内容加载完前 LatexEasy 的 dark mode CSS 还没接管 body，深色模式
+         下会闪一下白。把 body 默认色也跟随 prefers-color-scheme，避免闪烁 */
+        @media (prefers-color-scheme: dark) {
+            html, body {
+                background: #1a1a1f;
+                color: #e8e8ed;
+            }
+        }
+        #app {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* ===== canvas-container 跟随 iframe resize =====
+         * LatexEasy 初始化时调 updateContainerSize() 把 canvasContainer.style.width
+         * 和 height 写死成像素值（[latexeasy.js](latexEditor/latexeasy.js) line 33912-33917：
+         * `n.style.width = t.width + "px"`），iframe 后续变宽它也不会重新计算。
+         * 用户实测反馈「小窗口打开编辑器 → 拉宽窗口 → 公式显示区变小/留大片空白」——
+         * 根因就是这个写死的内联宽高覆盖了原本 CSS 的 width:100% / height:100%。
+         *
+         * 用 !important CSS 强制让 canvasContainer 始终占满父级
+         * `.kf-editor-edit-area`（flex:1, display:flex, align-items:center）：
+         * - width:100% → canvasContainer 横向填满 edit-area，公式在大窗口下居中
+         * - height:100% → canvasContainer 纵向填满 edit-area，公式区不再只占 init
+         *   时的固定像素高度
+         * - overflow:hidden → 宽公式在窄窗口下溢出 canvasContainer 时被裁掉，
+         *   避免画 SVG 飞出去。 */
+        .kf-editor-canvas-container {
+            width: 100% !important;
+            height: 100% !important;
+            overflow: hidden !important;
+        }
+
+        /* ===== SVG 最大宽度约束 =====
+         * LatexEasy 在 [latexeasy.js:29052-29056](latexEditor/latexeasy.js#L29052-L29056)
+         * `_formatCanvas()` 把 kity Paper 的 SVG width/height 属性设成公式自然
+         * renderBox 尺寸（line 29055 `t.node.setAttribute("width", e.width)`）——
+         * 没有任何最大宽度约束。所以宽公式（如长分数链 a^2/((b+c)/(d+e))）会
+         * 按自然宽度渲染，超出 canvasContainer。
+         *
+         * 用 CSS max-width/max-height 强制让 SVG 在 canvasContainer 内缩放：
+         * - SVG viewBox 不变（kity 公式坐标系不变，鼠标点击 / 光标定位都还准）
+         * - SVG 视觉尺寸被 cap 在 canvasContainer 范围内，超出部分按 viewBox
+         *   比例等比缩放——公式在小窗口下视觉上变小，但完整可见、不溢出
+         * - `!important` 覆盖 LatexEasy JS 后续可能再次 setAttribute("width", ...)
+         *   写的内联值
+         *
+         * **不**设 `width: 100%` 而用 `max-width`：短公式 SVG 仍按自然尺寸渲染
+         * （不被拉伸放大），只有超出 canvasContainer 时才缩放。 */
+        .kf-editor-canvas-container svg {
+            max-width: 100% !important;
+            max-height: 100% !important;
+        }
+
+        /* ===== 永远隐藏水平滚动条 =====
+         * 我们在 JS 层 monkey-patch 掉了 LatexEasy 的窄屏 overflow 优化（详见下方
+         * disableNarrowScreenOptimization 函数）：公式宽度 > canvasContainer 宽度时
+         * 不再切到"锚左边 + 滚动条"模式，永远保持"居中 + 不滚"。所以滚动条理论上
+         * 永远不会被 ui.show.scrollbar service 显示出来。但 CSS 这层加 display:none
+         * !important 做最后一道防御——万一未来 LatexEasy 升级改了内部逻辑、
+         * 或某些边缘路径调了 ui.show.scrollbar，滚动条也不会再出现在用户面前。
+         *
+         * 真正的窄屏行为：宽公式 SVG 被上面的 max-width/max-height 约束等比
+         * 缩放到 canvasContainer 内，完整可见。公式比 iframe 还宽时由 iframe
+         * 自身 OS 滚动条兜底。 */
+        .kf-editor-edit-scrollbar {
+            display: none !important;
+        }
+
+        /* ===== 深色模式适配 =====
+         * 深色模式 CSS 已直接追加到 latexeasy.css 末尾（@media (prefers-color-scheme: dark)
+         * 段），不再在 notification.html 重复定义。理由：(1) latexeasy.css 的规则
+         * specificity 跟原文件同档，!important 覆盖没优势；(2) 单点维护更清晰——
+         * 后续 LatexEasy 升级要保留深色覆盖时，只动 latexeasy.css 末尾那段就行，
+         * 不必同步两处。
+         */
+    </style>
+</head>
+<body>
+<div id="app"></div>
+<script src="jquery.js"></script>
+<script src="mathjax-tex-svg.js"></script>
+<script src="latexeasy.js"></script>
+<script src="vue.js"></script>
+<script src="index.js"></script>
+<script>
+    window.__msCDN = "https://cdn.latexeasy.com/";
+    window.__msRoot = "/";
+    window.__data = {
+        lang: "zh",
+        latex: ""
+    };
+    window.api = {
+        dialog: {},
+        base: {},
+    };
+</script>
+<script src="editor.js"></script>
+<script>
+    function postToParent(type, data) {
+        try {
+            parent.postMessage(Object.assign({ type: 'latexEditor.' + type }, data || {}), '*');
+        } catch (e) {}
+    }
+
+    /**
+     * 把一段 LaTeX 渲染成独立 SVG XML——用 iframe 内已经加载的 MathJax v3
+     * (`mathjax-tex-svg.js`，tex-svg.js 是 v3 的 SVG output bundle）。
+     * **实测确认是 v3 不是 v2**——latexeasy.js 已用 v3 API
+     * `window.MathJax.tex2svg(t).firstChild.outerHTML`，所以 v2 的
+     * `MathJax.Hub.Queue(['Typeset', ...])` 在这里**根本不存在**，会抛
+     * "undefined is not an object" 错误。
+     *
+     * **走 postMessage 而非 window.bbRenderLatexToSvg 直接调用**：父窗口
+     * `iframe.contentWindow.bbRenderLatexToSvg` 在某些环境下（iOS WebView /
+     * addon host）属性访问会抛 SecurityError 而非返回 'undefined'——加
+     * try/catch 只能 fallback 显示错误，并不能真的渲染。postMessage 是跨
+     * 帧通信的 robustness 兜底（任何 origin 都能用），所以换成 iframe 监听
+     * `latexEditor.renderSvg` 消息 + 自身渲染 + postMessage 回结果。
+     *
+     * MathJax v3 tex2svg 是**同步** API：返回一个 HTML wrapper，第一个 child
+     * 就是 `<svg>`。latexeasy.js 已用这套：tex2svg(t).firstChild.outerHTML。
+     * 但首次调 tex2svg 之前**必须** await MathJax.startup.promise，否则
+     * 输出 SVG 包字体 fallback（缺失字形）。这里用 6s timeout 兜底 MathJax
+     * 没加载完的极端情况。
+     *
+     * 流程：
+     *   1. 收到 `type:'latexEditor.renderSvg'` 消息 → 拿到 latex / requestId
+     *   2. await MathJax.startup.promise（v3 startup 完成后才能用 tex2svg）
+     *   3. MathJax.tex2svg('\\[' + latex + '\\]')  ——display math delimiters
+     *      让 SVG 块级居中、字符更"公式感"
+     *   4. wrapper.firstChild 就是 <svg>，outerHTML 拿到序列化 XML
+     *   5. postMessage 回 `{type:'latexEditor.renderSvgResult', requestId, svg, wAttr, hAttr}`
+     *      或失败 `{type:'latexEditor.renderSvgResult', requestId, error:'msg'}`
+     *
+     * 6s timeout 兜底防 MathJax 没加载完 / startup 卡住。
+     */
+    function renderLatexToSvgString(latex, requestId) {
+        var src = String(latex || '');
+        try { console.log('[latexEditor-iframe] renderSvg called', { latexLen: src.length, requestId: requestId }); } catch (e) {}
+        if (!src.trim()) {
+            postToParent('renderSvgResult', {
+                requestId: requestId,
+                svg: '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"></svg>',
+                wAttr: '1',
+                hAttr: '1'
+            });
+            return;
+        }
+        var done = false;
+        function finish(payload) {
+            if (done) return;
+            done = true;
+            try { console.log('[latexEditor-iframe] finishing', { hasSvg: !!payload.svg, hasError: !!payload.error, err: payload.error }); } catch (e) {}
+            postToParent('renderSvgResult', payload);
+        }
+        var to = setTimeout(function() {
+            finish({ requestId: requestId, error: 'MathJax timeout' });
+        }, 6000);
+
+        function doRender() {
+            try {
+                try { console.log('[latexEditor-iframe] doRender: MathJax?', { hasMathJax: !!window.MathJax, hasTex2svg: !!(window.MathJax && window.MathJax.tex2svg) }); } catch (e) {}
+                if (!window.MathJax || typeof window.MathJax.tex2svg !== 'function') {
+                    finish({ requestId: requestId, error: 'tex2svg 不可用' });
+                    return;
+                }
+                // MathJax v3 tex2svg 同步 API：返回的 wrapper 是 MathJax 内部
+                // 节点，firstChild 就是 <svg>。outerHTML 拿序列化 XML。
+                // **不要**手动包 `\[...\]` ——MathJax v3 会把这两个字符渲染
+                // 成可见的红色界定符（display math 标记符）。直接传原 latex
+                // + options.display = true 就足够触发 display mode 排版。
+                var wrapper = window.MathJax.tex2svg(src, {
+                    display: true,
+                    em: 16,
+                    ex: 8,
+                    containerWidth: 1200
+                });
+                try { console.log('[latexEditor-iframe] tex2svg returned', { wrapperType: wrapper && wrapper.nodeName, firstChild: wrapper && wrapper.firstChild && wrapper.firstChild.nodeName }); } catch (e) {}
+                var svg = wrapper && wrapper.firstChild;
+                if (!svg || svg.nodeName !== 'svg') {
+                    finish({ requestId: requestId, error: 'no svg produced' });
+                    return;
+                }
+                finish({
+                    requestId: requestId,
+                    svg: new XMLSerializer().serializeToString(svg),
+                    wAttr: svg.getAttribute('width') || '',
+                    hAttr: svg.getAttribute('height') || ''
+                });
+            } catch (e) {
+                try { console.log('[latexEditor-iframe] doRender threw', { msg: e && e.message, stack: e && e.stack }); } catch (e2) {}
+                finish({ requestId: requestId, error: (e && e.message) || 'unknown' });
+            }
+        }
+
+        // 等 MathJax v3 startup promise（字体加载 / config 就绪）。
+        // 已 ready 时直接调；否则等 promise。
+        if (window.MathJax && window.MathJax.startup && window.MathJax.startup.promise) {
+            window.MathJax.startup.promise.then(doRender, function(err) {
+                try { console.log('[latexEditor-iframe] startup rejected', err); } catch (e) {}
+                finish({ requestId: requestId, error: 'MathJax startup 失败' });
+            });
+        } else {
+            doRender();
+        }
+    }
+
+    window.addEventListener('message', function(e) {
+        var d = e && e.data;
+        if (!d || typeof d !== 'object') return;
+        if (d.type !== 'latexEditor.renderSvg') return;
+        renderLatexToSvgString(d.latex, d.requestId);
+    });
+
+    function notifyResize() {
+        try {
+            var h = document.documentElement.scrollHeight || document.body.scrollHeight;
+            postToParent('resize', { height: h });
+        } catch (e) {}
+    }
+
+    /**
+     * 关掉 LatexEasy 的窄屏 overflow 优化 —— 让公式永远居中、不进 scroll mode。
+     *
+     * LatexEasy 在 [latexeasy.js:33956-33967](latexEditor/latexeasy.js#L33956-L33967) 的
+     * `updateCanvasView` 里检查公式 paper.width 是否超过 canvasContainer.width：
+     *   - 超 → overflow 路径：toggle viewState=OVERFLOW、显示滚动条、设
+     *     relDisabled=true、调 render.relocation（因 relDisabled=true 走
+     *     [line 29237](latexEditor/latexeasy.js#L29237) 的 `relocationToLeft`，
+     *     把公式 viewBox 锚到画布左边缘让用户能横向滚看）
+     *   - 不超 → no-overflow 路径：toggle viewState=NO_OVERFLOW、隐藏滚动条、
+     *     设 relDisabled=false、调 render.relocation（走
+     *     [line 29232](latexEditor/latexeasy.js#L29232) 的 `relocationToCenter`
+     *     把公式 viewBox 居中）
+     *
+     * 这套优化在固定宽度的桌面编辑器场景没问题，但在我们这个**父面板宽度随时
+     * 变化**的场景会出 bug：UI 组件把 `canvasRect.width` 缓存到 init 时（line
+     * 33958 `null === this.canvasRect && ...` 只缓存一次）、永不重读。
+     * 父面板拉宽后 canvasContainer 实际变宽了（CSS !important 覆盖内联宽高），
+     * 但 LatexEasy 内部仍按"溢出、锚左边"逻辑跑——公式贴在画布左边缘、新大画
+     * 布中央空白，**看起来公式偏右**。滚动条 `.kf-editor-edit-scrollbar` 是这条
+     * overflow 路径的视觉指示（scrollbar.viewWidth 也只 init 一次，line 33656-
+     * 33662），不是病因本身。
+     *
+     * 既然这条窄屏优化在我们场景下是**纯 bug 来源**（公式一般不宽，不需要滚；
+     * 真超宽时 iframe 自身 OS 滚动条兜底），直接 monkey-patch `updateCanvasView`
+     * 强制走 no-overflow 路径——每次调用都 hide 滚动条 + enable relocation +
+     * 调 relocation（relDisabled=false → relocationToCenter 自动居中）。同时把
+     * canvasRect 缓存清空、viewState 重置成 NO_OVERFLOW，避免 toggleViewState
+     * 因旧状态走错分支。
+     *
+     * 副作用 / 边界 case：宽公式在窄 iframe 下会从画布右边缘溢出、被
+     * canvasContainer 的 overflow:hidden 裁掉——不出现水平滚动条。整张公式真比
+     * iframe 还宽时由 iframe 自身的 OS 滚动条兜底。这种极端宽度在「卡片里的公式」
+     * 场景几乎不会触发（用户实测的都是普通公式）。
+     *
+     * 触发时机：pollForReady 检测到 .kf-editor 挂载后调用一次（idempotent，
+     * 多次调安全）。后续 LatexEasy 内部任何 updateCanvasView 调用都会被我们的
+     * patch 拦截。
+     */
+    var _narrowScreenOptimizationPatched = false;
+    function disableNarrowScreenOptimization() {
+        if (_narrowScreenOptimizationPatched) return;
+        if (!window.kfe || !window.kfe.services) return;
+        var uiEntry = window.kfe.services['ui.update.canvas.view'];
+        if (!uiEntry || !uiEntry.provider || !uiEntry.service) return;
+        var uiComp = uiEntry.provider;
+        // 强制走 no-overflow 路径：永远 hide 滚动条 + 永远 enable relocation +
+        // 永远 relocation（relDisabled=false → 自动走 relocationToCenter）。
+        // 同时把 canvasRect 缓存清掉、viewState 重置成 NO_OVERFLOW，避免下次
+        // 内部 check 走错分支。LatexEasy 内部所有 updateCanvasView 调用都过
+        // `requestService("ui.update.canvas.view")().updateCanvasView()` 动态查
+        // 找方法——覆盖 service.updateCanvasView 就能拦掉所有调用。
+        uiEntry.service.updateCanvasView = function() {
+            // 'this' 绑到 UI 组件（requestService 用它作为 service 方法的 owner）
+            this.canvasRect = null;
+            this.viewState = 0; // NO_OVERFLOW（line 31373）
+            try { this.kfEditor.requestService("ui.hide.scrollbar"); } catch (e) {}
+            try { this.kfEditor.requestService("render.enable.relocation"); } catch (e) {}
+            try { this.kfEditor.requestService("render.relocation"); } catch (e) {}
+        }.bind(uiComp);
+        _narrowScreenOptimizationPatched = true;
+    }
+
+    /**
+     * 重新触发 LatexEasy 的内部 resize —— 让 kity SVG 重新计算画布尺寸 +
+     * 重新居中公式。LatexEasy 初始化时调 `updateContainerSize` 把 canvasContainer
+     * 写死成像素宽高（[latexeasy.js](latexEditor/latexeasy.js) line 33912-33917），
+     * iframe 后续变宽时它**不会**自动重新计算，导致 canvasContainer 永远停在
+     * init 时的尺寸（如 400×30），公式在变宽的 iframe 里只占固定小画布、中间
+     * 大片空白。
+     *
+     * 修法（多重保险）：
+     *   1. CSS `!important` 强制 `.kf-editor-canvas-container { width:100%;
+     *      height:100%; overflow:hidden }` 覆盖内联像素宽高 + 裁溢出——canvasContainer
+     *      物理上始终填满父级 .kf-editor-edit-area，无论 LatexEasy JS 写什么
+     *      内联样式都被压住。
+     *   2. `disableNarrowScreenOptimization()` monkey-patch 掉 LatexEasy 的窄屏
+     *      overflow 优化（详见上面函数注释）——公式永远居中、不走 scroll 模式。
+     *      公式偏右的真实病因是 LatexEasy 在 iframe resize 后还卡在 OVERFLOW 模式
+     *      走 left 锚分支，关掉这条优化就根治了。
+     *   3. `window.kfe.resize()` 让 Ace 子编辑器同步重排（避免 Ace 编辑器在
+     *      大窗口下还卡在小尺寸）。
+     *
+     * 触发时机：iframe 自身 reflow 时（window.resize 事件），以及父窗口拉宽
+     * iframe 时（postMessage 'latexEditor.resize' 消息，由 [latexEditor.js](latexEditor.js)
+     * 监听 window.resize 后投递）。
+     */
+    function fixLatexEditorLayout() {
+        if (!window.kfe || !window.kfe.services) return;
+        try {
+            // (1) Ace 子编辑器重排
+            if (typeof window.kfe.resize === 'function') {
+                window.kfe.resize();
+            }
+            // (2) 关掉 LatexEasy 窄屏 overflow 优化（公式永远居中、不滚）——
+            // 兜底 idempotent，disableNarrowScreenOptimization 已 patch 过就早退
+            disableNarrowScreenOptimization();
+            // (3) 手动跑一次 updateCanvasView 让公式 viewBox 重置到中心——
+            // 走我们 patch 过的版本：永远 hide 滚动条 + enable relocation +
+            // relocation → 自动 relocationToCenter。
+            var uiEntry = window.kfe.services['ui.update.canvas.view'];
+            if (uiEntry && uiEntry.service && typeof uiEntry.service.updateCanvasView === 'function') {
+                uiEntry.service.updateCanvasView();
+            }
+            // (4) 兜底：万一 (3) 因为某些路径没经过 updateCanvasView（例如
+            // LatexEasy 内部直接调 render.set.canvas.to.center 的旧路径），
+            // 再显式调一次 setCanvasToCenter 把公式 viewBox 锚到中心——
+            // 这条路径最直接、不依赖任何 cacheRect / viewState。
+            var centerService = window.kfe.requestService('render.set.canvas.to.center');
+            if (centerService && typeof centerService.setCanvasToCenter === 'function') {
+                centerService.setCanvasToCenter();
+            }
+        } catch (e) {}
+    }
+
+    // 编辑器没有独立的 ready 自定义事件，
+    // 这里轮询检测 .kf-editor DOM 元素是否已挂载到文档中。
+    function pollForReady() {
+        try {
+            var mounted = document.querySelector('.kf-editor');
+            if (mounted && mounted.children && mounted.children.length > 0 && !pollForReady._notified) {
+                pollForReady._notified = true;
+                postToParent('ready', {});
+                setTimeout(notifyResize, 50);
+                setTimeout(notifyResize, 300);
+                // 立刻 patch LatexEasy 窄屏 overflow 优化（idempotent）——必须
+                // 在 LatexEasy 第一次 updateCanvasView 调用**之前**完成，否则
+                // 它会先把公式锚到左边再被我们 patch 覆盖，多一次 race。挂载
+                // 时就调：.kf-editor 有 children 表示 UI 组件已构造完，window.kfe
+                // 也已经赋值（[editor.js](latexEditor/editor.js) line 20840
+                // `window.kfe = i` 在 UI 组件 init 里同步设的）。
+                disableNarrowScreenOptimization();
+                // ready 后立刻 fix 一次——避免某些场景下 LatexEasy 初始化时
+                // canvasContainer 用了 0 像素（iframe 还在加载、容器还没量到
+                // 真实尺寸），等真实尺寸出来后必须强制刷新一次。
+                setTimeout(fixLatexEditorLayout, 100);
+                setTimeout(fixLatexEditorLayout, 600);
+            }
+        } catch (e) {}
+    }
+    var pollTimer = setInterval(pollForReady, 200);
+    setTimeout(function () { clearInterval(pollTimer); }, 30000);
+
+    // iframe 自身 reflow 时（编辑器内 DOM 改动触发 layout）：重新计算
+    // kity 画布。父窗口拉宽面板 → iframe style.width 变化通常**不会**触发
+    // iframe 内的 window.resize（已知 iframe resize 在不同浏览器表现不一），
+    // 所以**必须**配合下面的 postMessage 'latexEditor.resize' 触发路径。
+    var iframeResizeDebounce = null;
+    function onIframeResize() {
+        if (iframeResizeDebounce) clearTimeout(iframeResizeDebounce);
+        iframeResizeDebounce = setTimeout(fixLatexEditorLayout, 50);
+        notifyResize();
+    }
+    window.addEventListener('resize', onIframeResize);
+    setInterval(notifyResize, 1500);
+
+    // 父窗口 → iframe 'latexEditor.resize' 消息：父 [latexEditor.js](latexEditor.js)
+    // 监听到 window.resize 时投递，触发我们手动跑 fixLatexEditorLayout()。
+    // iOS WKWebView / 部分 WebView host 下 iframe 自身 window.resize 不触发
+    // （父改 iframe style.width 不引起 iframe 内部 reflow 事件），所以必须
+    // 走 postMessage 兜底。
+    window.addEventListener('message', function(e) {
+        var d = e && e.data;
+        if (!d || typeof d !== 'object') return;
+        if (d.type !== 'latexEditor.resize') return;
+        fixLatexEditorLayout();
+    });
+</script>
+</body>
+</html>

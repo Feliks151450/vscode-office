@@ -22,8 +22,8 @@ import { ensureEditorBoundaryParagraphs } from "./renderDomByMd";
 import { previoueIsEmptyA } from "./inlineTag";
 
 export const input = (vditor: IVditor, range: Range, event?: InputEvent) => {
-    const debug = vditor.options.debugger;
-    const printSpinHtml = !!vditor.options.wysiwygInputPerf;
+    const debug = vditor.options.debugger || window.vditorDebug;
+    const printSpinHtml = !!vditor.options.wysiwygInputPerf || window.vditorDebug;
     const totalStart = debug ? performance.now() : 0;
     let stepStart = debug ? performance.now() : 0;
     let prepareHtmlMs = 0;

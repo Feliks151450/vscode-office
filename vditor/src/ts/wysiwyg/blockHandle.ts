@@ -503,14 +503,37 @@ const removeDragGhost = (state: IBlockHandleState) => {
 
 const createDragGhost = (block: HTMLElement) => {
     const rect = block.getBoundingClientRect();
-    const blockStyle = getComputedStyle(block);
-    const ghost = document.createElement("div");
-    ghost.className = GHOST_CLASS;
-    ghost.textContent = block.innerText.trim() || "\u00a0";
+    // \u514b\u9686\u5757\u7684\u771f\u5b9e DOM \u4f5c\u4e3a\u62d6\u62fd\u5e7d\u7075\u2014\u2014
+    // \u4e4b\u524d\u7528 block.innerText \u62bd\u7eaf\u6587\u672c\uff0c\u9047\u5230 MathJax/KaTeX SVG \u65f6\u4f1a\u88ab innerText \u5728\u6bcf\u4e2a
+    // <tspan> \u4e4b\u95f4\u63d2\u5165 "\n"\uff0c\u518d\u53e0\u52a0 ghost \u7684 white-space: pre-wrap \u5bfc\u81f4\u516c\u5f0f\u5b57\u7b26\u7ad6\u6392\u6210\u4e00\u5217\u3002
+    // cloneNode(true) \u4fdd\u7559 SVG \u5b8c\u6574\u7ed3\u6784\uff0c\u516c\u5f0f\u5728\u62d6\u62fd\u9884\u89c8\u91cc\u6b63\u5e38\u6e32\u67d3\u3002
+    const ghost = block.cloneNode(true) as HTMLElement;
+    ghost.className = `${GHOST_CLASS} ${block.className}`;
+    // \u628a\u539f\u5757\u5185\u53ef\u80fd\u5b58\u5728\u7684 vditor-block-handle-target \u7c7b\u79fb\u6389\uff0c
+    // \u907f\u514d ghost \u5728\u62d6\u62fd\u65f6\u8fd8\u8bd5\u56fe\u88ab\u539f blockHandle \u9009\u4e3a\u76ee\u6807\uff08\u5bfc\u81f4\u62d6\u62fd\u65f6\u624b\u67c4\u95ea\u70c1\uff09\u3002
+    ghost.classList.remove("vditor-block-handle-target");
+    ghost.style.position = "fixed";
+    ghost.style.left = `${rect.left}px`;
+    ghost.style.top = `${rect.top}px`;
+    ghost.style.width = `${rect.width}px`;
     ghost.style.maxWidth = `${rect.width}px`;
-    ghost.style.font = blockStyle.font;
-    ghost.style.lineHeight = blockStyle.lineHeight;
-    ghost.style.color = blockStyle.color;
+    ghost.style.margin = "0";
+    ghost.style.pointerEvents = "none";
+    ghost.style.opacity = "0.45";
+
+    // \u516c\u5f0f\u6e90\u4ee3\u4e0d\u80fd\u663e\u793a\u5728 ghost \u91cc\u3002\u5757\u7684\u6e90 <pre> \u5728 ensureMathBlockPreviewMode \u91cc
+    // \u901a\u8fc7\u5185\u8054 style.display="none" \u9690\u85cf\u4e86\uff08cloneNode \u4f1a\u4fdd\u7559\uff09\uff1b\u4f46**\u884c\u5185\u516c\u5f0f**\u7684\u6e90
+    // <code> \u662f\u9760 CSS \u9009\u62e9\u5668 `.vditor-reset [data-type="math-inline"]>code[data-type="math-inline"]`
+    // \u9690\u85cf\u7684\uff0c\u514b\u9686\u4f53\u88ab\u6302\u5230 document.body \u4e0b\u3001\u4e0d\u5728 .vditor-reset \u4f5c\u7528\u57df\u91cc\uff0cCSS
+    // \u9009\u62e9\u5668\u5339\u914d\u4e0d\u5230\uff0c\u7ed3\u679c\u6e90 <code> \u8ddf\u6e32\u67d3\u540e\u7684 SVG \u540c\u65f6\u663e\u793a\u51fa\u6765\u3002
+    // \u8fd9\u91cc\u624b\u52a8\u7ed9\u514b\u9686\u4f53\u91cc\u7684\u6e90\u5143\u7d20\u52a0\u5185\u8054 display:none\uff0c\u7ed5\u8fc7\u4f5c\u7528\u57df\u9650\u5236\u3002
+    ghost.querySelectorAll('[data-type="math-inline"]>code[data-type="math-inline"]').forEach((el) => {
+        (el as HTMLElement).style.display = "none";
+    });
+    ghost.querySelectorAll(".language-math > pre").forEach((el) => {
+        (el as HTMLElement).style.display = "none";
+    });
+
     document.body.appendChild(ghost);
     return ghost;
 };

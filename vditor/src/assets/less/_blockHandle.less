@@ -85,12 +85,13 @@
 }
 
 .vditor-block-handle__ghost {
+  // 现在 ghost 是块的真实 DOM 克隆，不再需要 pre-wrap/word-break —— 那两行
+  // 在原版用 innerText 抽纯文本的实现里用于折行，但在克隆 DOM 上会破坏 SVG
+  // 排版，导致 MathJax/KaTeX 公式字符被竖排。
   position: fixed;
   z-index: 10000;
   pointer-events: none;
   opacity: 0.45;
-  white-space: pre-wrap;
-  word-break: break-word;
 }
 
 .vditor-block-handle--dragging {

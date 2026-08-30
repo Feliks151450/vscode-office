@@ -100,6 +100,57 @@ html[data-editor-theme="Auto"],
     --bold-color: color-mix(in srgb, var(--front-color) 80%, var(--vscode-charts-yellow, #cca700) 20%);
     --italic-color: color-mix(in srgb, var(--front-color) 76%, var(--wikilink-color, #7c3aed) 24%);
 
+    /* Surface —— 覆盖上方浅色 fallback；浏览器独立使用时 --vscode-* 未定义，
+       走深色 fallback，使 .vditor--dark 自动切换在非 VSCode 环境生效 */
+    --bg-color: var(--vscode-editor-background, #24292e);
+    --front-color: var(--vscode-editor-foreground, #d1d5da);
+    --second-bg-color: var(--vscode-dropdown-background, var(--vscode-editorWidget-background, #2f363d));
+    --second-color: var(--vscode-input-placeholderForeground, rgba(185, 185, 185, 0.36));
+
+    /* Border & Divider */
+    --hr-bg: var(--vscode-textSeparator-foreground, #141414);
+    --border-color: var(--vscode-widget-border, var(--vscode-panel-border, #141414));
+
+    /* Blockquote */
+    --blockquote-color: var(--vscode-descriptionForeground, var(--front-color));
+    --blockquote-border: var(--vscode-textBlockQuote-border, var(--border-color));
+
+    /* Table */
+    --table-header-bg: var(--vscode-keybindingTable-headerBackground, var(--vscode-sideBarSectionHeader-background, #2a3038));
+    --table-body-bg: var(--vscode-editor-background, #2f363d);
+    --table-axis-color: var(--vscode-tab-inactiveForeground, #8b949e);
+
+    /* Inline Code */
+    --code-bg-color: var(--vscode-textCodeBlock-background, rgba(127, 127, 127, 0.2));
+    --code-fg-color: var(--vscode-textPreformat-foreground, var(--front-color));
+
+    /* Toolbar & Panel */
+    --toolbar-background-color: var(--vscode-editorGroupHeader-tabsBackground, var(--vscode-editor-background, #1d2125));
+    --toolbar-icon-color: var(--vscode-icon-foreground, var(--vscode-foreground, var(--front-color)));
+    --toolbar-icon-hover-color: var(--link-color);
+    --panel-background-color: var(--vscode-editor-background, var(--bg-color));
+    --panel-shadow: 0 8px 24px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.42));
+    --textarea-background-color: var(--vscode-editor-background, #2f363d);
+    --textarea-text-color: var(--vscode-editor-foreground, var(--front-color));
+    --count-background-color: color-mix(in srgb, var(--vscode-badge-background, var(--vscode-editor-foreground, #d1d5da)) 20%, transparent);
+
+    /* Outline */
+    --outline-bg-color: var(--vscode-sideBar-background, color-mix(in srgb, var(--second-bg-color) 15%, var(--bg-color)));
+    --outline-hover-bg: var(--dropdown-hover-background, color-mix(in srgb, var(--front-color) 4%, var(--outline-bg-color)));
+    --outline-active-bg: color-mix(in srgb, var(--front-color) 8%, var(--outline-hover-bg));
+
+    /* CodeMirror */
+    --cm-bg-color: var(--vscode-editorWidget-background, #24292e);
+    --cm-fg-color: var(--vscode-editor-foreground, #d1d5da);
+    --cm-lang-trigger-bg: var(--vscode-input-background, color-mix(in srgb, var(--front-color) 14%, var(--cm-bg-color)));
+    --cm-active-line-bg: var(--vscode-editor-lineHighlightBackground, color-mix(in srgb, var(--front-color) 6%, var(--cm-bg-color)));
+    --cm-active-line-gutter-fg: var(--vscode-editorLineNumber-activeForeground, var(--vscode-editorLineNumber-foreground));
+    --cm-fold-fg: var(--vscode-editorGutter-foldingControlForeground, var(--vscode-icon-foreground, var(--front-color)));
+    --cm-fold-bg: var(--vscode-editor-foldBackground, color-mix(in srgb, var(--cm-fold-fg) 12%, var(--cm-bg-color)));
+    --cm-cursor-fg: var(--vscode-editorCursor-foreground, var(--front-color));
+    --cm-line-number-fg: var(--vscode-editorLineNumber-foreground, rgba(128, 128, 128, 0.6));
+    --cm-line-number-active-fg: var(--vscode-editorLineNumber-activeForeground, var(--front-color));
+
     /* IR Syntax */
     --ir-heading-color: var(--vscode-symbolIcon-keywordForeground, #c586c0);
     --ir-title-color: var(--vscode-descriptionForeground, #6a737d);

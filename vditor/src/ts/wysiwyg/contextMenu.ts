@@ -155,6 +155,12 @@ export const initContextMenu = (vditor: IVditor, editorElement: HTMLElement) => 
     menuMap.set(vditor, state);
 
     editorElement.addEventListener("contextmenu", (e: MouseEvent) => {
+        if (window.vditorDebug) {
+            console.log("[contextMenu] right-click, enableContextMenu =", vditor.options.enableContextMenu);
+        }
+        if (!vditor.options.enableContextMenu) {
+            return;
+        }
         e.preventDefault();
         e.stopPropagation();
 

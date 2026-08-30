@@ -1,5 +1,5 @@
 export const log = (method: string, content: string, type: string, print: boolean) => {
-    if (print) {
+    if (print || window.vditorDebug) {
         // @ts-ignore
         console.log(`${method} - ${type}: ${content}`);
     }
@@ -8,7 +8,7 @@ export const log = (method: string, content: string, type: string, print: boolea
 export const formatMs = (ms: number) => `${ms.toFixed(2)}ms`;
 
 export const logPerf = (print: boolean, label: string, data: Record<string, string>) => {
-    if (print) {
+    if (print || window.vditorDebug) {
         console.log(label, data);
     }
 };

@@ -32,7 +32,7 @@ import { setEditMode } from "./ts/toolbar/EditMode";
 import { setTheme } from "./ts/ui/setTheme";
 import { Undo } from "./ts/undo/index";
 import { Upload } from "./ts/upload/index";
-import { addScript } from "./ts/util/addScript";
+import { addScript, addScriptSync } from "./ts/util/addScript";
 import { clearCacheFocus, restoreCacheFocus } from "./ts/util/cacheFocus";
 import { accessLocalStorage } from "./ts/util/compatibility";
 import { clearDocumentScroll, restoreDocumentScroll } from "./ts/util/documentState";

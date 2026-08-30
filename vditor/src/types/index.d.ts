@@ -4,6 +4,7 @@ declare module "*.png";
 
 interface Window {
     VditorI18n: ITips;
+    vditorDebug?: boolean;
 }
 
 /** CSS Custom Highlight API */
@@ -372,10 +373,14 @@ interface IMenuItem {
 
 /** @link https://ld246.com/article/1549638745630#options-preview-math */
 interface IMath {
+    /** 数学公式渲染引擎：KaTeX, MathJax。默认值: 'KaTeX' */
+    engine?: "KaTeX" | "MathJax";
     /** 内联数学公式起始 $ 后是否允许数字。默认值: true */
     inlineDigit?: boolean;
-    /** KaTeX 宏定义。默认值: {} */
+    /** KaTeX/MathJax 宏定义。默认值: {} */
     macros?: object;
+    /** 数学公式渲染引擎为 MathJax 时的参数 */
+    mathJaxOptions?: object;
 }
 
 type ILinkClickType = "link" | "wikilink" | "wikilink-embed" | "image" | "tag" | "footnote-ref" | "link-ref";
