@@ -1,0 +1,102 @@
+// 块操作菜单：拖拽按钮点击（不拖拽）时弹出。
+// 挂在 document.body，因此只依赖 html 级别作用域的 CSS 变量（--bg-color / --front-color 等）。
+
+.vditor-block-menu {
+  position: fixed;
+  z-index: 100001;
+  display: none;
+  flex-direction: column;
+  min-width: 180px;
+  max-width: 260px;
+  padding: 4px 0;
+  border: 1px solid var(--border-color, rgba(128, 128, 128, 0.2));
+  border-radius: 8px;
+  background: var(--bg-color, #fff);
+  color: var(--front-color, #1f2937);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12), 0 2px 4px rgba(0, 0, 0, 0.06);
+  font-size: 13px;
+  user-select: none;
+  overflow: hidden;
+
+  // 窄屏：菜单宽度收窄到视口内，避免极端 viewport 下溢出
+  @media (max-width: 480px) {
+    min-width: 0;
+    max-width: calc(100vw - 24px);
+    width: max-content;
+  }
+
+  &--visible {
+    display: flex;
+  }
+
+  &__label {
+    padding: 6px 14px 4px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--second-color, #9ca3af);
+  }
+
+  &__item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 6px 14px;
+    border: none;
+    background: transparent;
+    color: inherit;
+    font-size: 13px;
+    text-align: left;
+    cursor: pointer;
+    transition: background-color 0.1s ease;
+
+    &:hover,
+    &:focus-visible {
+      background: color-mix(in srgb, var(--front-color) 6%, transparent);
+      outline: none;
+    }
+
+    &:active {
+      background: color-mix(in srgb, var(--front-color) 12%, transparent);
+    }
+  }
+
+  &__item-icon {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    color: var(--second-color, #6b7280);
+
+    .codicon {
+      font-size: 16px;
+      line-height: 1;
+    }
+  }
+
+  &__item-label {
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+  }
+
+  &__divider {
+    height: 1px;
+    margin: 4px 0;
+    background: var(--border-color, rgba(128, 128, 128, 0.2));
+  }
+}
+
+// 暗色模式：菜单挂在 body，flat `.vditor--dark .vditor-block-menu` 选择器
+// 不会匹配（菜单不在 .vditor--dark 子树里）。靠 vditor 级别的 CSS 变量自动切换主题：
+//   1. 捆绑主题（Monokai/Dracula 等）→ html 级变量切换，CSS 变量继承即生效
+//   2. Auto 主题 → TS 在 showBlockMenu 里把 #vditor 的计算样式（--bg-color 等）
+//      复制到 menu 元素的 inline style（见 blockMenu.ts: syncBlockMenuTheme）
+//
+// hover / active 用 color-mix(--front-color, ...) 在两种模式下都自动反转：
+//   - 浅色主题：--front-color 是深色 → 混合出深色叠加，可见
+//   - 深色主题：--front-color 是浅色 → 混合出浅色叠加，可见

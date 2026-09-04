@@ -1,5 +1,7 @@
 window.VditorI18n = {
   'codeBlockHeight': '최대 높이',
+  'preview': '미리보기',
+  'previewClose': '미리보기 닫기',
   'expandCode': '펼치기',
   'collapseCode': '접기',
   'alignCenter': '가운데',

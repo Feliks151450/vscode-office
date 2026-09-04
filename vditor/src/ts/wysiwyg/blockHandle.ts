@@ -4,6 +4,7 @@ import { execAfterRender } from "../util/fixBrowserBehavior";
 import { scrollElementIntoEditorView, setSelectionFocus } from "../util/selection";
 import { telemetry } from "../util/telemetry";
 import { renderTocNow } from "../util/toc";
+import { showBlockMenu, hideBlockMenu } from "./blockMenu";
 
 const ROOT_CLASS = "vditor-block-handle";
 const DRAG_CLASS = "vditor-block-handle__drag";
@@ -16,7 +17,7 @@ const SOURCE_DRAGGING_CLASS = "vditor-block-handle__source--dragging";
 const GHOST_CLASS = "vditor-block-handle__ghost";
 const TARGET_CLASS = "vditor-block-handle-target";
 const HANDLE_GAP = 4;
-const HANDLE_SIZE = 20;
+const HANDLE_SIZE = 28;
 /** 向上拖拽时，插入线提前触发的像素容差 */
 const DROP_LINE_HIT_OFFSET = 14;
 
@@ -437,7 +438,8 @@ const positionHandle = (state: IBlockHandleState, block: HTMLElement) => {
     const wrapperRect = state.wrapper.getBoundingClientRect();
     const lineHeight = parseFloat(getComputedStyle(block).lineHeight) || 24;
     const top = blockRect.top - wrapperRect.top + Math.max(0, Math.min(lineHeight / 2 - HANDLE_SIZE / 2, 6));
-    const left = blockRect.left - wrapperRect.left - (block.tagName === "LI" ? 40 : 28) - HANDLE_SIZE - HANDLE_GAP;
+    // 始终贴在 wrapper 最左侧，不再跟随块的缩进偏移
+    const left = HANDLE_GAP;
     syncBlockMarkerTop(block);
     state.root.style.top = `${top}px`;
     state.root.style.left = `${left}px`;
@@ -652,10 +654,14 @@ const finishDrag = (vditor: IVditor, state: IBlockHandleState) => {
     }
 };
 
-const startDrag = (vditor: IVditor, state: IBlockHandleState, event: PointerEvent) => {
+const initActualDrag = (
+    vditor: IVditor,
+    state: IBlockHandleState,
+    event: PointerEvent,
+): ((moveEvent: PointerEvent) => void) | null => {
     const block = state.activeBlock;
     if (!block || !isEditingMode(vditor)) {
-        return;
+        return null;
     }
     event.preventDefault();
     event.stopPropagation();
@@ -679,7 +685,7 @@ const startDrag = (vditor: IVditor, state: IBlockHandleState, event: PointerEven
 
     state.dragBtn.setPointerCapture(event.pointerId);
 
-    const onPointerMove = (moveEvent: PointerEvent) => {
+    return (moveEvent: PointerEvent) => {
         if (state.dragGhost) {
             positionDragGhost(
                 state.dragGhost,
@@ -693,12 +699,57 @@ const startDrag = (vditor: IVditor, state: IBlockHandleState, event: PointerEven
         state.dropTarget = { container: line.container, referenceNode: line.referenceNode };
         positionDropLine(state, state.dropTarget);
     };
+};
+
+/**
+ * 处理拖拽按钮的 pointerdown：延迟启动拖拽（>5px 才算拖拽），
+ * 否则按 click 处理，弹出块操作菜单。
+ */
+const handleDragButtonPointerDown = (
+    vditor: IVditor,
+    state: IBlockHandleState,
+    event: PointerEvent,
+) => {
+    const block = state.activeBlock;
+    if (!block || !isEditingMode(vditor)) {
+        return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const CLICK_THRESHOLD_SQ = 25; // 5px²
+    let dragStarted = false;
+    let dragMoveHandler: ((e: PointerEvent) => void) | null = null;
+
+    state.dragBtn.setPointerCapture(event.pointerId);
+
+    const onPointerMove = (moveEvent: PointerEvent) => {
+        const dx = moveEvent.clientX - startX;
+        const dy = moveEvent.clientY - startY;
+        if (!dragStarted && dx * dx + dy * dy > CLICK_THRESHOLD_SQ) {
+            dragStarted = true;
+            dragMoveHandler = initActualDrag(vditor, state, event);
+            // 拖拽真正开始时，如果上一次点击出菜单还开着就关掉，
+            // 避免菜单浮在拖拽光标旁边干扰视线
+            hideBlockMenu(vditor);
+        }
+        if (dragStarted && dragMoveHandler) {
+            dragMoveHandler(moveEvent);
+        }
+    };
 
     const onPointerUp = (upEvent: PointerEvent) => {
         state.dragBtn.releasePointerCapture(upEvent.pointerId);
         document.removeEventListener("pointermove", onPointerMove);
         document.removeEventListener("pointerup", onPointerUp);
-        finishDrag(vditor, state);
+        if (dragStarted) {
+            finishDrag(vditor, state);
+        } else {
+            // 点击（不拖拽）：弹出块操作菜单
+            showBlockMenu(vditor, state.activeBlock, state.root);
+        }
     };
 
     document.addEventListener("pointermove", onPointerMove);
@@ -796,7 +847,7 @@ export const initBlockHandle = (vditor: IVditor, wrapper: HTMLElement, editorEle
         event.preventDefault();
     }, { passive: false });
     dragBtn.addEventListener("pointerdown", (event) => {
-        startDrag(vditor, state, event);
+        handleDragButtonPointerDown(vditor, state, event);
     });
     insertBtn.addEventListener("mousedown", (event) => {
         event.preventDefault();

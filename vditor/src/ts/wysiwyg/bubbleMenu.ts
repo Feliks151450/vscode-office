@@ -45,6 +45,58 @@ const FORMAT_ITEMS = [
     { name: "html-inline", icon: "symbol-structure" },
 ];
 
+/**
+ * 一次性闭锁：检测页面是否收到过任何触控手势（touchstart）。
+ * iOS Safari 才会触发自带的选中文本菜单，纯鼠标设备永远不需要走移除再恢复的流程。
+ * capture 阶段挂监听，保证即使被其它 handler `preventDefault` 也能先收到。
+ */
+let hasReceivedTouchEvent = false;
+const markTouchReceived = () => {
+    hasReceivedTouchEvent = true;
+    document.removeEventListener("touchstart", markTouchReceived, true);
+};
+
+if (typeof document !== "undefined") {
+    document.addEventListener("touchstart", markTouchReceived, { passive: true, capture: true });
+}
+
+/**
+ * iOS 端：先移除选区再恢复，能消除 iOS 自带的选中文本菜单（复制 / 查词等）。
+ * 清除和恢复之间用 50ms 延时，给 Safari 足够时间确认选区已清空、收起浮层菜单——
+ * 同步执行时 Safari 会判定选区未变、菜单不消失。
+ *
+ * - `afterRestore` 回调在恢复选区之后再执行；适用于后续操作需要原选区的场景
+ *   （比如包成 html-inline shell、打开编辑弹窗）。不传则视为纯"消屏"场景
+ *   （如点击颜色按钮后立即展示调色板，色块点击会自行读最新选区）。
+ */
+const bypassIosSelectionMenu = (afterRestore?: () => void) => {
+    if (!hasReceivedTouchEvent) {
+        // 页面从未收到过触控手势——纯鼠标设备，不需要走清选区流程，直接原样执行
+        afterRestore?.();
+        return;
+    }
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) {
+        afterRestore?.();
+        return;
+    }
+    const savedRange = selection.getRangeAt(0).cloneRange();
+    if (savedRange.collapsed) {
+        afterRestore?.();
+        return;
+    }
+    selection.removeAllRanges();
+    setTimeout(() => {
+        try {
+            selection.addRange(savedRange);
+        } catch (e) {
+            // range 所属节点在 50ms 内被外部改动时 addRange 会抛错；
+            // 吞掉即可——调用方仍按当前选区自行决定是否继续。
+        }
+        afterRestore?.();
+    }, 50);
+};
+
 const clickToolbarButton = (vditor: IVditor, name: string) => {
     const toolbarBtn = vditor.toolbar.elements?.[name]?.firstElementChild as HTMLElement;
     if (toolbarBtn) {
@@ -202,9 +254,16 @@ const createBubbleMenuElement = (vditor: IVditor): HTMLElement => {
             } else if (item.name === "html-inline") {
                 // 包选中文本为 html-inline shell，立即打开弹窗编辑
                 // 折叠选区时函数返回 false，气泡菜单照常隐藏即可
-                wrapSelectionWithHtmlInline(vditor);
-                hideBubbleMenu(vditor);
+                // iOS 端先把选区清掉再恢复以消除自带选中文本菜单；
+                // 包 shell、隐藏气泡菜单这些用选区的操作都得在恢复后再做
+                bypassIosSelectionMenu(() => {
+                    wrapSelectionWithHtmlInline(vditor);
+                    hideBubbleMenu(vditor);
+                });
             } else if (item.name === "text-color") {
+                // iOS 端：点击颜色按钮时先移除选区再恢复，能消除 iOS 自带的选中文本菜单
+                //（复制 / 查词等）——调色板本身展示不依赖选区，色块点击时会再读最新选区
+                bypassIosSelectionMenu();
                 showColorPalette(vditor, btn);
                 // 气泡菜单保持显示，等待调色板操作
             } else {

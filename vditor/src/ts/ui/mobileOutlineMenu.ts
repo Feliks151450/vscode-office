@@ -107,7 +107,13 @@ const handleMobileOutlineResize = (vditor: IVditor) => {
         host.wasMobileLayout = false;
         if (isDesktopLayout(vditor)) {
             host.menuBtn.style.display = "";
-            host.menuBtn.classList.toggle("vditor-mobile-outline-trigger--active", host.drawerOpen);
+            // clearMobileOutlineUi 把 drawerOpen 强制设回 false，但 restoreDesktopState
+            // 又把大纲按 vditor.options.outline.enable 显示了——两边状态不同步。
+            // 以大纲元素的实际 display 状态为准来同步 drawerOpen 和 --active，
+            // 避免移动端开着的画拉到桌面端后按钮不高亮的 bug。
+            const outlineShown = vditor.outline.element.style.display !== "none";
+            host.drawerOpen = outlineShown;
+            host.menuBtn.classList.toggle("vditor-mobile-outline-trigger--active", outlineShown);
         }
         return;
     }

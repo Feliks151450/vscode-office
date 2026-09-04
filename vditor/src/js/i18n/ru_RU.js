@@ -1,5 +1,7 @@
 window.VditorI18n = {
   'codeBlockHeight': 'Максимальная высота',
+  'preview': 'Предпросмотр',
+  'previewClose': 'Закрыть предпросмотр',
   'expandCode': 'Развернуть',
   'collapseCode': 'Свернуть',
   'alignCenter': 'Выровнять по центру',

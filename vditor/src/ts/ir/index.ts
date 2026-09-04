@@ -44,6 +44,7 @@ import { scheduleHighlightToolbar } from "../util/highlightToolbar";
 import { input } from "./input";
 import { processAfterRender, processHint } from "./process";
 import { initBlockHandle } from "../wysiwyg/blockHandle";
+import { initBlockMenu } from "../wysiwyg/blockMenu";
 import { initTableHandle } from "../wysiwyg/tableHandle";
 
 class IR {
@@ -71,6 +72,7 @@ class IR {
         this.bindEvent(vditor);
 
         initBlockHandle(vditor, divElement, this.element);
+        initBlockMenu(vditor, this.element);
         initTableHandle(vditor, divElement, this.element);
 
         linkClickEvent(vditor, divElement);

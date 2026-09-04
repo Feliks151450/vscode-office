@@ -1,5 +1,7 @@
 window.VditorI18n = {
   'codeBlockHeight': '最大高さ',
+  'preview': 'プレビュー',
+  'previewClose': 'プレビューを閉じる',
   'expandCode': '展開',
   'collapseCode': '折りたたむ',
   'alignCenter': '中央',

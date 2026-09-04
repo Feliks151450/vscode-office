@@ -20,19 +20,18 @@ import { afterRenderEvent } from "../wysiwyg/afterRenderEvent";
 import { processAfterRender } from "../ir/process";
 import { telemetry } from "../util/telemetry";
 import { resolveTextColors, resolveBgColors } from "../util/colorPalette";
+import {
+    decodeHtmlInlineSource,
+    MD_SOURCE_ESC_NEWLINE,
+    renderHtmlInlineShell,
+} from "./htmlInlineShell";
 
 const HTML_EDITOR_POPOVER_CLASS = "vditor-popover--html-inline";
 const HTML_EDITOR_PANEL_CLASS = "vditor-panel--html-inline";
 const POPOVER_INSET = 8;
 const VIEWPORT_MARGIN = 12;
-const MD_SOURCE_ESC_NEWLINE = "_esc_newline_";
 
-const decodeMdSourceAttr = (raw: string | null): string => {
-    if (!raw) {
-        return "";
-    }
-    return raw.replaceAll(MD_SOURCE_ESC_NEWLINE, "\n");
-};
+const decodeMdSourceAttr = (raw: string | null): string => decodeHtmlInlineSource(raw);
 
 type HtmlEditTarget = {
     anchorElement: HTMLElement;
@@ -40,6 +39,10 @@ type HtmlEditTarget = {
     getSource: () => string;
     applySource: (source: string) => HTMLElement | null;
     remove: () => void;
+    /** 取消时执行（如清理"待包裹"锚点、还原选区） */
+    onCancel?: () => void;
+    /** 强制按行内类型处理（"待包裹"目标没有 data-type 属性） */
+    inlineType?: boolean;
 };
 
 type HtmlEditorPopoverBinding = {
@@ -53,6 +56,30 @@ let activeHtmlEditorPopover: HtmlEditorPopoverBinding | null = null;
 let positionAnchor: HTMLElement | null = null;
 let positionVditor: IVditor | null = null;
 let scrollRepositionHandler: (() => void) | null = null;
+// 用户拖动 html 编辑器弹窗后此 flag 为 true，下一次 scroll-reposition 跳过
+// 重新贴齐锚点的逻辑，避免把用户拖动后的位置又拽回去。
+let htmlEditorPopoverDragged = false;
+
+/**
+ * "待包裹"状态：气泡菜单点"行内 html"按钮时只插入零宽锚点定位弹窗，
+ * 真正把选中文本包成 shell 要等用户点保存（取消则原样保留）。
+ */
+let pendingHtmlWrap: { marker: HTMLElement; range: Range } | null = null;
+
+const abortPendingHtmlWrap = (restoreSelection: boolean) => {
+    if (!pendingHtmlWrap) {
+        return;
+    }
+    pendingHtmlWrap.marker.remove();
+    if (restoreSelection) {
+        const selection = window.getSelection();
+        if (selection && pendingHtmlWrap.range) {
+            selection.removeAllRanges();
+            selection.addRange(pendingHtmlWrap.range);
+        }
+    }
+    pendingHtmlWrap = null;
+};
 
 const destroyHtmlEditorCodeMirror = () => {
     if (!activeHtmlEditorPopover) {
@@ -157,11 +184,103 @@ const attachPopoverReposition = (vditor: IVditor, anchorElement: HTMLElement) =>
                 hideHtmlEditorPopover(positionVditor);
                 return;
             }
+            // 用户拖动过之后，弹窗位置由用户控制，不再被 scroll 拽回锚点
+            if (htmlEditorPopoverDragged) {
+                return;
+            }
             clampHtmlEditorPopoverPosition(positionVditor, positionAnchor);
         }
     };
     window.addEventListener("scroll", scrollRepositionHandler, true);
     getModeEditorElement(vditor)?.addEventListener("scroll", scrollRepositionHandler);
+};
+
+/**
+ * 把 html 编辑器弹窗顶部 `handle` 做成可拖动抓手。
+ *
+ * 行为：
+ *  - 拖拽时把 popover 从 `position: absolute`（依附容器坐标系，会跟着滚动）切到
+ *    `position: fixed`（视口坐标系，拖到哪里就停在哪里）。
+ *  - 真正移动过（didMove）才会标记 htmlEditorPopoverDragged，并取消后续
+ *    scroll-reposition —— 否则点一下但没拖，popover 仍贴齐锚点。
+ *  - 用 pointer 事件统一覆盖鼠标 / 触摸 + `setPointerCapture` 让指针离开 handle
+ *    时仍能继续接收 move / up，不用再挂 window 级监听。
+ */
+const makePopoverDraggable = (popover: HTMLElement, handle: HTMLElement) => {
+    let offsetX = 0;
+    let offsetY = 0;
+    let activePointerId: number | null = null;
+    let didMove = false;
+
+    const onPointerMove = (e: PointerEvent) => {
+        if (e.pointerId !== activePointerId) {
+            return;
+        }
+        didMove = true;
+        const maxLeft = window.innerWidth - 40;
+        const maxTop = window.innerHeight - 30;
+        // 允许 popover 一半超出左侧（用户想往屏幕外拖时不会到一半就卡住），
+        // 但要求右侧至少露出 40px 的拖动抓手；顶部不允许为负、下方同理。
+        const newLeft = Math.max(
+            -popover.offsetWidth / 2,
+            Math.min(e.clientX - offsetX, maxLeft),
+        );
+        const newTop = Math.max(
+            0,
+            Math.min(e.clientY - offsetY, maxTop),
+        );
+        popover.style.left = `${newLeft}px`;
+        popover.style.top = `${newTop}px`;
+    };
+
+    const endDrag = (e: PointerEvent) => {
+        if (e.pointerId !== activePointerId) {
+            return;
+        }
+        activePointerId = null;
+        if (didMove) {
+            // 真正拖过了，标记并取消锚点贴齐
+            htmlEditorPopoverDragged = true;
+            detachPopoverReposition();
+        }
+        handle.removeEventListener("pointermove", onPointerMove);
+        handle.removeEventListener("pointerup", endDrag);
+        handle.removeEventListener("pointercancel", endDrag);
+    };
+
+    handle.addEventListener("pointerdown", (e: PointerEvent) => {
+        if (e.button !== 0) {
+            return;
+        }
+        // 保留扩展位：未来如果头栏放了小按钮，让按钮自身的事件不被吞掉
+        if ((e.target as HTMLElement).closest("button, input, textarea, [contenteditable]")) {
+            return;
+        }
+        e.preventDefault();
+        try {
+            handle.setPointerCapture(e.pointerId);
+        } catch {
+            // 旧浏览器或非 pointer 场景兜底
+        }
+        activePointerId = e.pointerId;
+        didMove = false;
+
+        const rect = popover.getBoundingClientRect();
+        offsetX = e.clientX - rect.left;
+        offsetY = e.clientY - rect.top;
+
+        // 切换到 fixed：从这一刻起坐标以视口为参照，
+        // top / left 直接复用当前 rect 的视口位置
+        popover.style.position = "fixed";
+        popover.style.top = `${rect.top}px`;
+        popover.style.left = `${rect.left}px`;
+        popover.style.right = "";
+        popover.style.bottom = "";
+
+        handle.addEventListener("pointermove", onPointerMove);
+        handle.addEventListener("pointerup", endDrag);
+        handle.addEventListener("pointercancel", endDrag);
+    });
 };
 
 const scheduleHtmlEditorPopoverPosition = (vditor: IVditor, anchorElement: HTMLElement) => {
@@ -181,10 +300,13 @@ const hideHtmlEditorPopover = (vditor: IVditor) => {
     }
     detachPopoverReposition();
     destroyHtmlEditorCodeMirror();
+    htmlEditorPopoverDragged = false;
     popover.style.position = "";
     popover.style.display = "none";
     popover.classList.remove(HTML_EDITOR_POPOVER_CLASS, HTML_EDITOR_PANEL_CLASS);
     popover.innerHTML = "";
+    // 弹窗关闭（取消 / 保存已先行清理 / 滚动移出视口）时废弃"待包裹"状态
+    abortPendingHtmlWrap(true);
 };
 
 const restoreFocusAfterHtmlRemove = (
@@ -257,21 +379,6 @@ const notifyAfterHtmlEditorChange = (vditor: IVditor) => {
     afterRenderEvent(vditor);
 };
 
-const renderHtmlInlineFromMd = (vditor: IVditor, md: string): string => {
-    const trimmed = md.trim();
-    if (!trimmed) {
-        return "";
-    }
-    const wrapper = `${Constants.ZWSP}${trimmed}${Constants.ZWSP}`;
-    const html = vditor.currentMode === "ir"
-        ? vditor.lute.Md2VditorIRDOM(wrapper)
-        : vditor.lute.Md2VditorDOM(wrapper);
-    const temp = document.createElement("div");
-    temp.innerHTML = html;
-    const node = temp.querySelector('[data-type="html-inline"]') as HTMLElement | null;
-    return node?.outerHTML ?? "";
-};
-
 /**
  * 把新的 color/background-color 合并到 Markdown 源里：
  *   - 如果最外层是 <span ... style="...">...</span>，合并到现有的 style 属性
@@ -292,7 +399,7 @@ const parseStyleAttr = (styleStr: string): Map<string, string> => {
         if (colonIdx === -1) return;
         const k = part.slice(0, colonIdx).trim().toLowerCase();
         const v = part.slice(colonIdx + 1).trim();
-        if (k && v) map.set(k, v);
+        if (k && v) map.set(k, normalizeRgbToHex(v));
     });
     return map;
 };
@@ -301,6 +408,19 @@ const serializeStyleMap = (map: Map<string, string>): string =>
     Array.from(map.entries())
         .map(([k, v]) => `${k}:${v}`)
         .join(";");
+
+/**
+ * 把 CSS 颜色里的 rgb(r, g, b) 转成 6 位 hex，其他格式（rgba、named、百分比等）原样保留。
+ *
+ * 为什么需要：CSSOM 赋值（el.style.color = "#dc2626"）后浏览器序列化 style 属性
+ * 会归一化成 rgb(220, 38, 38)；字符串路径（setAttribute / mergeStyleIntoSource）
+ * 则保留 hex。这里统一成 hex，避免同一份 markdown 里两种格式混用。
+ */
+const normalizeRgbToHex = (s: string): string =>
+    s.replace(/rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/gi, (_match, r: string, g: string, b: string) => {
+        const toHex = (n: string) => Math.min(255, Math.max(0, Number(n))).toString(16).padStart(2, "0");
+        return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+    });
 
 const mergeStyleIntoSource = (
     source: string,
@@ -363,42 +483,17 @@ const visualHostToMarkdown = (host: HTMLElement): string => {
         if (node.nodeType !== Node.ELEMENT_NODE) return "";
         const el = node as HTMLElement;
         const children = Array.from(el.childNodes).map(walk).join("");
-        if (el.tagName === "SPAN" && el.hasAttribute("style")) {
-            return `<span style="${el.getAttribute("style")}">${children}</span>`;
+        if (el.tagName === "SPAN") {
+            // 保留所有 span 结构（无 style 的 `<span>` 也不能丢，否则包裹就失效了）；
+            // 浏览器 CSSOM 会把 hex 序列化成 rgb，这里统一回 hex
+            const styleAttr = el.hasAttribute("style")
+                ? ` style="${normalizeRgbToHex(el.getAttribute("style") || "")}"`
+                : "";
+            return `<span${styleAttr}>${children}</span>`;
         }
         return children;
     };
     return walk(host).trim();
-};
-
-/**
- * 从选区开始向上找最近的 span[style] 祖先。预览模式改色时用来判断：
- * "选区是不是已经在某个有色 span 里？" 如果是，直接改那个 span 的 style 即可（避免嵌套）。
- */
-const findEnclosingStyleSpan = (range: Range): HTMLElement | null => {
-    let node: Node | null = range.startContainer;
-    if (node.nodeType === Node.TEXT_NODE) {
-        node = node.parentElement;
-    }
-    while (node) {
-        if (node.nodeType === Node.ELEMENT_NODE) {
-            const el = node as HTMLElement;
-            if (el.tagName === "SPAN" && el.hasAttribute("style")) {
-                return el;
-            }
-        }
-        node = node.parentElement;
-    }
-    return null;
-};
-
-/**
- * 判断选区是否完全落在 element 内部（没有跨 element 边界）。
- * 用于预览模式改色：只有完全包含时才安全地修改 element 的 style，
- * 否则会改到 element 之外的内容。
- */
-const isRangeFullyContainedIn = (range: Range, element: Element): boolean => {
-    return element.contains(range.startContainer) && element.contains(range.endContainer);
 };
 
 const renderHtmlBlockFromMd = (vditor: IVditor, md: string): string => {
@@ -435,28 +530,36 @@ const getHtmlBlockAnchor = (blockElement: HTMLElement): HTMLElement => {
     return preview || blockElement;
 };
 
-const createHtmlInlineTargetWithVditor = (vditor: IVditor, element: HTMLElement): HtmlEditTarget => ({
+const createHtmlInlineTargetWithVditor = (element: HTMLElement): HtmlEditTarget => ({
     anchorElement: element,
     focusElement: element,
     getSource: () => decodeMdSourceAttr(element.getAttribute("data-md-source")),
     applySource: (source: string) => {
-        const newHtml = renderHtmlInlineFromMd(vditor, source);
-        if (newHtml) {
-            const wrapper = document.createElement("div");
-            wrapper.innerHTML = newHtml;
-            const newNode = wrapper.firstElementChild as HTMLElement | null;
-            if (!newNode) {
-                return null;
-            }
-            element.replaceWith(newNode);
-            return newNode;
+        if (!source) {
+            element.remove();
+            return null;
         }
-        element.setAttribute("data-md-source", source);
-        const display = element.querySelector(".vditor-html-inline__display");
-        if (display) {
-            display.textContent = source;
+        console.log("source:", source);
+        // 把 source 包成手写 html-inline shell 后直接 DOM 替换。
+        // 不能用 execCommand('insertHTML')：编辑器的可编辑宿主是 <pre>，
+        // Chromium 在 pre 宿主里执行 insertHTML 会剥掉 shell 外壳并把嵌套
+        // span 拆平（实测：`<span bg>示例<span red>页面</span></span>`
+        // 变成两个兄弟 span，内层丢失背景色）。
+        // 记账（undo 栈、input 回调）由 save() 里的 addToUndoStack /
+        // notifyAfterHtmlEditorChange 负责，不需要 input 事件。
+        const wrappedHtml = renderHtmlInlineShell(source);
+        if (!wrappedHtml) {
+            element.remove();
+            return null;
         }
-        return element;
+        const wrapper = document.createElement("div");
+        wrapper.innerHTML = wrappedHtml;
+        const newNode = wrapper.firstElementChild as HTMLElement | null;
+        if (!newNode) {
+            return null;
+        }
+        element.replaceWith(newNode);
+        return newNode;
     },
     remove: () => element.remove(),
 });
@@ -601,6 +704,10 @@ export const showHtmlEditorPopover = (vditor: IVditor, target: HtmlEditTarget) =
     if (!popover || !target.anchorElement.isConnected) {
         return;
     }
+    // 打开新弹窗时，废弃上一个未完成的"待包裹"状态（其锚点不是本次目标）
+    if (pendingHtmlWrap && pendingHtmlWrap.marker !== target.anchorElement) {
+        abortPendingHtmlWrap(false);
+    }
 
     popover.classList.add(HTML_EDITOR_POPOVER_CLASS, HTML_EDITOR_PANEL_CLASS);
     popover.innerHTML = "";
@@ -608,8 +715,22 @@ export const showHtmlEditorPopover = (vditor: IVditor, target: HtmlEditTarget) =
     const panel = document.createElement("div");
     panel.className = "vditor-html-inline-popover";
 
+    // 顶部拖拽胶囊：空 div，靠 cursor + 自身圆角作为视觉提示。
+    const dragHeader = document.createElement("div");
+    dragHeader.className = "vditor-html-inline-popover__header";
+    dragHeader.setAttribute("aria-label", "拖动窗口");
+
+    // 顶部右上角关闭按钮（复用原 cancel 行为：丢弃编辑、关闭弹窗、恢复焦点）
+    const closeButton = document.createElement("button");
+    closeButton.type = "button";
+    closeButton.className = "vditor-html-inline-popover__close";
+    closeButton.setAttribute("aria-label", window.VditorI18n?.aiCancel ?? "Cancel");
+    closeButton.innerHTML = `<span class="vditor-html-inline-popover__button-icon">${codicon("close")}</span>`;
+    // click 监听放在 cancel 函数定义之后注册（见下方），避免 TDZ
+
     // 顶部颜色栏（仅 html-inline 显示，html-block 没意义）
-    const isInlineType = target.anchorElement.getAttribute("data-type") === "html-inline";
+    const isInlineType = target.inlineType
+        ?? target.anchorElement.getAttribute("data-type") === "html-inline";
     const colorBar = document.createElement("div");
     colorBar.className = "vditor-html-inline-popover__color-bar";
     if (!isInlineType) {
@@ -624,25 +745,16 @@ export const showHtmlEditorPopover = (vditor: IVditor, target: HtmlEditTarget) =
     visualHost.setAttribute("contenteditable", "true");
     visualHost.setAttribute("spellcheck", "false");
 
-    const modeTabs = document.createElement("div");
-    modeTabs.className = "vditor-html-inline-popover__mode-tabs";
-
-    const rawTab = document.createElement("button");
-    rawTab.type = "button";
-    rawTab.className = "vditor-html-inline-popover__tab";
-    rawTab.textContent = "源码";
-
-    const previewTab = document.createElement("button");
-    previewTab.type = "button";
-    previewTab.className = "vditor-html-inline-popover__tab";
-    previewTab.textContent = "预览";
-
-    modeTabs.appendChild(rawTab);
-    modeTabs.appendChild(previewTab);
+    // 模式切换按钮：左上角单按钮，文案显示"目标模式"——当前是 preview，按钮写"源码"
+// （点一下进入源码模式）。把原本的"源码 / 预览"双 tab 合一个，少占一行纵向空间。
+    const modeToggleButton = document.createElement("button");
+    modeToggleButton.type = "button";
+    modeToggleButton.className = "vditor-html-inline-popover__mode-toggle";
+    modeToggleButton.textContent = "源码";
 
     // html-block 不显示模式切换（视觉编辑没意义）
     if (!isInlineType) {
-        modeTabs.style.display = "none";
+        modeToggleButton.style.display = "none";
         visualHost.style.display = "none";
     }
 
@@ -667,11 +779,6 @@ export const showHtmlEditorPopover = (vditor: IVditor, target: HtmlEditTarget) =
     saveButton.type = "button";
     saveButton.className = "vditor-html-inline-popover__button vditor-html-inline-popover__button--primary";
     saveButton.textContent = window.VditorI18n?.aiSave ?? "Save";
-
-    const cancelButton = document.createElement("button");
-    cancelButton.type = "button";
-    cancelButton.className = "vditor-html-inline-popover__button vditor-html-inline-popover__button--cancel";
-    cancelButton.textContent = window.VditorI18n?.aiCancel ?? "Cancel";
 
     const clearInlineHtmlButton = document.createElement("button");
     clearInlineHtmlButton.type = "button";
@@ -708,11 +815,18 @@ export const showHtmlEditorPopover = (vditor: IVditor, target: HtmlEditTarget) =
     };
 
     const cancel = () => {
+        targetRef.onCancel?.();
         closeHtmlEditorPopover(vditor, targetRef.focusElement);
     };
 
     const stripToPlainText = () => {
         const anchorEl = targetRef.anchorElement;
+        if (anchorEl.classList.contains("vditor-html-inline__pending-anchor")) {
+            // "待包裹"状态还没有任何 HTML，没有可还原的；按取消处理
+            targetRef.onCancel?.();
+            closeHtmlEditorPopover(vditor, targetRef.focusElement);
+            return;
+        }
         const parent = anchorEl.parentElement;
         if (!parent) return;
         const view = activeHtmlEditorPopover?.view;
@@ -738,7 +852,7 @@ export const showHtmlEditorPopover = (vditor: IVditor, target: HtmlEditTarget) =
     };
 
     saveButton.addEventListener("click", save);
-    cancelButton.addEventListener("click", cancel);
+    closeButton.addEventListener("click", cancel);
     wrapButton.addEventListener("click", () => toggleHtmlEditorLineWrap(wrapButton));
     clearInlineHtmlButton.addEventListener("click", stripToPlainText);
 
@@ -755,7 +869,8 @@ export const showHtmlEditorPopover = (vditor: IVditor, target: HtmlEditTarget) =
     };
 
     // 预览模式下应用样式：
-//   1. 如果 visualHost 内有非折叠选区 → 按选区处理（合并到外层 span 或包新 span）
+//   1. 如果 visualHost 内有非折叠选区 → 只对选区包一个新 span（不动外层 span 的样式，
+//      这样只改选中部分的格式，保持原有"嵌套"语义）
 //   2. 否则（折叠 / 选区不在 visualHost）→ 应用到整个 visualHost 内容
 //
 // 为什么这样做：popover 默认聚焦的是 CodeMirror（在 hidden 状态下），用户的选区
@@ -772,26 +887,16 @@ export const showHtmlEditorPopover = (vditor: IVditor, target: HtmlEditTarget) =
         }
 
         if (inHostRange) {
-            // 路径 1：visualHost 内有非折叠选区
+            // 路径 1：visualHost 内有非折叠选区 — 只对选区包新 span
+            // 不再"合并到外层 span"，那样会把整段文字的样式都改了，与用户的选区意图不符。
+            // 嵌套的 span 由 buildEditorHtmlForMarkdown 的 flattenNestedHtmlInline 处理。
             const range = inHostRange;
-            const ancestorSpan = findEnclosingStyleSpan(range);
-            if (ancestorSpan && isRangeFullyContainedIn(range, ancestorSpan)) {
-                // 完全落在已有 span[style] 内 → 合并到该 span（不嵌套）
-                const styleMap = parseStyleAttr(ancestorSpan.getAttribute("style") || "");
-                if (newStyle.color) styleMap.set("color", newStyle.color);
-                if (newStyle.backgroundColor) styleMap.set("background-color", newStyle.backgroundColor);
-                ancestorSpan.setAttribute("style", serializeStyleMap(styleMap));
-                selection!.removeAllRanges();
-                const newRange = document.createRange();
-                newRange.selectNodeContents(ancestorSpan);
-                newRange.collapse(false);
-                selection!.addRange(newRange);
-                return;
-            }
-            // 选区跨 span 边界或无外层 span → 包新 span
             const span = document.createElement("span");
-            if (newStyle.color) span.style.color = newStyle.color;
-            if (newStyle.backgroundColor) span.style.backgroundColor = newStyle.backgroundColor;
+            // 用字符串方式写 style，避免 CSSOM 把 hex 序列化成 rgb
+            const wrapStyle = new Map<string, string>();
+            if (newStyle.color) wrapStyle.set("color", newStyle.color);
+            if (newStyle.backgroundColor) wrapStyle.set("background-color", newStyle.backgroundColor);
+            span.setAttribute("style", serializeStyleMap(wrapStyle));
             try {
                 range.surroundContents(span);
             } catch {
@@ -826,8 +931,11 @@ export const showHtmlEditorPopover = (vditor: IVditor, target: HtmlEditTarget) =
         }
         // 没有外层 span → 把所有 children 包到一个新 span 里
         const wrapper = document.createElement("span");
-        if (newStyle.color) wrapper.style.color = newStyle.color;
-        if (newStyle.backgroundColor) wrapper.style.backgroundColor = newStyle.backgroundColor;
+        // 用字符串方式写 style，避免 CSSOM 把 hex 序列化成 rgb
+        const wrapperStyle = new Map<string, string>();
+        if (newStyle.color) wrapperStyle.set("color", newStyle.color);
+        if (newStyle.backgroundColor) wrapperStyle.set("background-color", newStyle.backgroundColor);
+        wrapper.setAttribute("style", serializeStyleMap(wrapperStyle));
         while (visualHost.firstChild) {
             wrapper.appendChild(visualHost.firstChild);
         }
@@ -846,8 +954,8 @@ export const showHtmlEditorPopover = (vditor: IVditor, target: HtmlEditTarget) =
         visualHost.innerHTML = html;
         cmHost.style.display = "none";
         visualHost.style.display = "";
-        previewTab.classList.add("vditor-html-inline-popover__tab--active");
-        rawTab.classList.remove("vditor-html-inline-popover__tab--active");
+        // 切换后按钮文案指向"目标模式"——现在已是 preview，下一点就回 preview
+        modeToggleButton.textContent = "源码";
         currentMode = "preview";
     };
 
@@ -862,19 +970,22 @@ export const showHtmlEditorPopover = (vditor: IVditor, target: HtmlEditTarget) =
         }
         cmHost.style.display = "";
         visualHost.style.display = "none";
-        rawTab.classList.add("vditor-html-inline-popover__tab--active");
-        previewTab.classList.remove("vditor-html-inline-popover__tab--active");
+        // 文案指向目标模式——现在已是 raw，下一点回 preview
+        modeToggleButton.textContent = "预览";
         currentMode = "raw";
         // 切到源码后让 CodeMirror 拿到焦点，光标移到末尾
         view?.focus();
         view?.dispatch({ selection: { anchor: md.length } });
     };
 
-    rawTab.addEventListener("click", () => {
-        if (currentMode !== "raw") switchToRaw();
-    });
-    previewTab.addEventListener("click", () => {
-        if (currentMode !== "preview") switchToPreview();
+    modeToggleButton.addEventListener("click", () => {
+        // 单按钮 toggle：当前 preview → 切 raw；当前 raw → 切 preview。
+        // switchToPreview 自身在非 inline 类型时是 no-op，正面路径只走 isInlineType。
+        if (currentMode === "preview") {
+            switchToRaw();
+        } else {
+            switchToPreview();
+        }
     });
 
     const buildColorRow = (label: string, swatches: readonly string[], apply: (color: string) => void) => {
@@ -919,16 +1030,20 @@ export const showHtmlEditorPopover = (vditor: IVditor, target: HtmlEditTarget) =
 
     actionsButtons.appendChild(wrapButton);
     actionsButtons.appendChild(clearInlineHtmlButton);
-    actionsButtons.appendChild(cancelButton);
     actionsButtons.appendChild(saveButton);
     actions.appendChild(hint);
     actions.appendChild(actionsButtons);
+    panel.appendChild(dragHeader);
+    panel.appendChild(closeButton);
+    panel.appendChild(modeToggleButton);
     panel.appendChild(colorBar);
-    panel.appendChild(modeTabs);
     panel.appendChild(visualHost);
     panel.appendChild(cmHost);
     panel.appendChild(actions);
     popover.appendChild(panel);
+    // 启用头部拖拽：每次新建 panel 都重新挂上；scroll-reposition 由 helper
+    // 内部在首轮真正移动后才会被取消，避免一次"误触"就锁死贴齐行为
+    makePopoverDraggable(popover, dragHeader);
     const view = mountHtmlEditorCodeMirror(cmHost, initialSource, save, cancel);
     applyHtmlEditorLineWrap(wrapButton, readHtmlEditorLineWrapEnabled());
     scheduleHtmlEditorPopoverPosition(vditor, target.anchorElement);
@@ -936,9 +1051,9 @@ export const showHtmlEditorPopover = (vditor: IVditor, target: HtmlEditTarget) =
     if (isInlineType) {
         switchToPreview();
     } else {
-        // html-block：保持源码模式高亮
+        // html-block：固定源码模式；modeToggleButton 已在上面 `if (!isInlineType)`
+        // 块里隐藏，visualHost 也已隐藏，无需额外处理。
         currentMode = "raw";
-        rawTab.classList.add("vditor-html-inline-popover__tab--active");
     }
     scheduleFocusHtmlEditorAtStart(view);
 };
@@ -967,7 +1082,7 @@ export const handleHtmlEditorClick = (
     if (htmlInline && htmlInline.getAttribute("contenteditable") === "false") {
         event.preventDefault();
         event.stopPropagation();
-        showHtmlEditorPopover(vditor, createHtmlInlineTargetWithVditor(vditor, htmlInline));
+        showHtmlEditorPopover(vditor, createHtmlInlineTargetWithVditor(htmlInline));
         return true;
     }
 
@@ -1027,7 +1142,7 @@ export const handleHtmlEditorAltEnter = (vditor: IVditor, range: Range): boolean
 
     const htmlInline = resolveReadonlyHtmlInlineFromRange(range);
     if (htmlInline) {
-        showHtmlEditorPopover(vditor, createHtmlInlineTargetWithVditor(vditor, htmlInline));
+        showHtmlEditorPopover(vditor, createHtmlInlineTargetWithVditor(htmlInline));
         return true;
     }
 
@@ -1044,7 +1159,7 @@ export const handleHtmlEditorAltEnter = (vditor: IVditor, range: Range): boolean
 export const handleHtmlInlineClick = handleHtmlEditorClick;
 
 export const showHtmlInlinePopover = (vditor: IVditor, htmlInlineElement: HTMLElement) => {
-    showHtmlEditorPopover(vditor, createHtmlInlineTargetWithVditor(vditor, htmlInlineElement));
+    showHtmlEditorPopover(vditor, createHtmlInlineTargetWithVditor(htmlInlineElement));
 };
 
 /**
@@ -1057,6 +1172,48 @@ export const showHtmlInlinePopover = (vditor: IVditor, htmlInlineElement: HTMLEl
  *
  * 仅 wysiwyg 模式有效；折叠选区时直接返回 false（让按钮"无效"，需要先选中文本）。
  */
+/**
+ * "待包裹"目标的 applySource：把原始选区替换成新 shell（此时才真正改动文本）。
+ */
+const createPendingHtmlInlineTarget = (
+    marker: HTMLElement,
+    range: Range,
+    initialMd: string,
+): HtmlEditTarget => ({
+    anchorElement: marker,
+    focusElement: marker,
+    getSource: () => initialMd,
+    applySource: (source: string) => {
+        // 清理锚点（range 是活引用，去掉 marker 后仍指向原文本）
+        abortPendingHtmlWrap(false);
+        if (!source) {
+            return null;
+        }
+        const wrappedHtml = renderHtmlInlineShell(source);
+        if (!wrappedHtml) {
+            return null;
+        }
+        const wrapper = document.createElement("div");
+        wrapper.innerHTML = wrappedHtml;
+        const newNode = wrapper.firstElementChild as HTMLElement | null;
+        if (!newNode) {
+            return null;
+        }
+        // 重新选中原始选区（弹窗打开时选区已被 CodeMirror 移走），用 shell 替换
+        const selection = window.getSelection();
+        if (selection) {
+            selection.removeAllRanges();
+            selection.addRange(range);
+        }
+        range.deleteContents();
+        range.insertNode(newNode);
+        return newNode;
+    },
+    remove: () => abortPendingHtmlWrap(false),
+    onCancel: () => abortPendingHtmlWrap(true),
+    inlineType: true,
+});
+
 export const wrapSelectionWithHtmlInline = (vditor: IVditor): boolean => {
     if (vditor.currentMode !== "wysiwyg") return false;
     const selection = window.getSelection();
@@ -1065,7 +1222,10 @@ export const wrapSelectionWithHtmlInline = (vditor: IVditor): boolean => {
     if (range.collapsed) return false;
     if (!vditor.wysiwyg.element.contains(range.startContainer)) return false;
 
-    // 选区文本转义后塞进 <span>...</span>，Lute 渲染时识别为 inline HTML
+    // 清理上一个残留的"待包裹"状态
+    abortPendingHtmlWrap(false);
+
+    // 选区文本转义后塞进 <span>...</span> 作为弹窗的初始源码
     const selectedText = range.toString();
     const escapedText = selectedText
         .replace(/&/g, "&amp;")
@@ -1075,23 +1235,14 @@ export const wrapSelectionWithHtmlInline = (vditor: IVditor): boolean => {
         .replace(/'/g, "&#39;");
     const initialMd = `<span>${escapedText}</span>`;
 
-    // 复用 setSelectionColor 那条渲染套路：两端加 ZWSP 让 Lute 识别为内联 HTML
-    const wrapper = `${Constants.ZWSP}${initialMd}${Constants.ZWSP}`;
-    const html = vditor.lute.Md2VditorDOM(wrapper);
-    const temp = document.createElement("div");
-    temp.innerHTML = html;
-    const shell = temp.querySelector('[data-type="html-inline"]') as HTMLElement | null;
-    if (!shell) return false;
+    // 点击按钮时不动选中文本：只插入一个零宽锚点（插在选区起点）用于弹窗定位，
+    // 保存时才把选区替换成 shell；取消（含 Esc / 还原 / 滚动移出视口）则原样保留。
+    const marker = document.createElement("span");
+    marker.className = "vditor-html-inline__pending-anchor";
+    marker.textContent = Constants.ZWSP;
+    range.insertNode(marker);
+    pendingHtmlWrap = { marker, range };
 
-    const shellClone = shell.cloneNode(true) as HTMLElement;
-    range.deleteContents();
-    range.insertNode(shellClone);
-
-    // 阻止浏览器 input 事件把新节点当作用户输入抹掉
-    vditor.wysiwyg.preventInput = true;
-    afterRenderEvent(vditor);
-
-    // 立刻打开弹窗，让用户编辑
-    showHtmlInlinePopover(vditor, shellClone);
+    showHtmlEditorPopover(vditor, createPendingHtmlInlineTarget(marker, range, initialMd));
     return true;
 };

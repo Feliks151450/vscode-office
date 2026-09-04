@@ -88,6 +88,7 @@ interface ICodeBlockChrome {
     performCopy: () => Promise<boolean>;
     langActiveIndex: number;
     expandBtn: HTMLButtonElement;
+    previewBtn: HTMLButtonElement;
     resizeObserver?: ResizeObserver;
 }
 
@@ -558,7 +559,15 @@ const createChromeRoot = (editable: boolean) => {
     copyBtn.className = "vditor-cm-chrome__copy";
     copyBtn.setAttribute("aria-label", window.VditorI18n.copy || "Copy");
     copyBtn.innerHTML = `<span class="vditor-cm-chrome__copy-icon">${codicon("copy")}</span>`;
+
+    const previewBtn = document.createElement("button");
+    previewBtn.type = "button";
+    previewBtn.className = "vditor-cm-chrome__preview";
+    previewBtn.setAttribute("aria-label", window.VditorI18n.preview || "Preview");
+    previewBtn.innerHTML = `<span class="vditor-cm-chrome__preview-icon">${codicon("eye")}</span>`;
+
     actions.appendChild(copyBtn);
+    actions.appendChild(previewBtn);
     actions.appendChild(expandBtn);
 
     toolbar.appendChild(langWrap);
@@ -576,6 +585,7 @@ const createChromeRoot = (editable: boolean) => {
         deleteBtn,
         copyBtn,
         expandBtn,
+        previewBtn,
         langWrap,
         langTrigger,
         langLabel: langTrigger.querySelector(".vditor-cm-chrome__lang-label") as HTMLElement,
@@ -640,6 +650,133 @@ const setupExpandToggle = (chrome: ICodeBlockChrome, host: HTMLElement) => {
     recomputeExpandState(chrome, host);
 };
 
+const PREVIEW_MODAL_ID = "vditor-code-preview-modal";
+
+const ensurePreviewModalElement = (): {
+    modal: HTMLDivElement;
+    body: HTMLDivElement;
+    title: HTMLElement;
+} => {
+    let modal = document.getElementById(PREVIEW_MODAL_ID) as HTMLDivElement | null;
+    if (modal) {
+        return {
+            modal,
+            body: modal.querySelector(".vditor-code-preview-modal__body") as HTMLDivElement,
+            title: modal.querySelector(".vditor-code-preview-modal__title") as HTMLElement,
+        };
+    }
+    modal = document.createElement("div");
+    modal.id = PREVIEW_MODAL_ID;
+    modal.className = "vditor-code-preview-modal";
+    modal.innerHTML = `
+        <div class="vditor-code-preview-modal__backdrop"></div>
+        <div class="vditor-code-preview-modal__dialog" role="dialog" aria-modal="true">
+            <div class="vditor-code-preview-modal__header">
+                <span class="vditor-code-preview-modal__title"></span>
+                <button type="button" class="vditor-code-preview-modal__close" aria-label="${window.VditorI18n.previewClose || "Close Preview"}">×</button>
+            </div>
+            <div class="vditor-code-preview-modal__body"></div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+    modal.querySelector(".vditor-code-preview-modal__backdrop")!.addEventListener("click", () => {
+        closeCodePreviewModal();
+    });
+    modal.querySelector(".vditor-code-preview-modal__close")!.addEventListener("click", () => {
+        closeCodePreviewModal();
+    });
+    document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && modal!.classList.contains("vditor-code-preview-modal--open")) {
+            closeCodePreviewModal();
+        }
+    });
+    return {
+        modal,
+        body: modal.querySelector(".vditor-code-preview-modal__body") as HTMLDivElement,
+        title: modal.querySelector(".vditor-code-preview-modal__title") as HTMLElement,
+    };
+};
+
+/**
+ * 把 vditor 元素当前计算出的主题色变量同步到 modal 元素上。
+ *
+ * 原因：modal 挂到 document.body 而非 vditor.element，CSS 变量从 html 级联不到这里；
+ * 而 `Auto` 主题的深色变量定义在 `#vditor[data-editor-theme="Auto"].vditor--dark` 上
+ * （[Auto.css:99](vditor/src/css/editor-theme/Auto.css#L99)），只在 vditor 子树生效。
+ * 直接把变量值复制到 modal，能让 modal 在所有主题下都跟 vditor 同步。
+ */
+const syncPreviewModalTheme = (modal: HTMLElement) => {
+    const vditorElement = document.getElementById("vditor");
+    if (!vditorElement) return;
+    const source = getComputedStyle(vditorElement);
+    const vars = ["--bg-color", "--front-color", "--second-bg-color", "--border-color", "--second-color"];
+    for (const name of vars) {
+        const value = source.getPropertyValue(name).trim();
+        if (value) {
+            modal.style.setProperty(name, value);
+        }
+    }
+};
+
+const openCodePreviewModal = (code: string, languageName: string) => {
+    const { modal, body, title } = ensurePreviewModalElement();
+    syncPreviewModalTheme(modal);
+    title.textContent = `${window.VditorI18n.preview || "Preview"}${languageName ? ` · ${languageName}` : ""}`;
+    body.innerHTML = "";
+    if (languageName === "html") {
+        // 用 sandboxed iframe 渲染 HTML，避免脚本执行（XSS 防护）
+        const iframe = document.createElement("iframe");
+        iframe.className = "vditor-code-preview-modal__iframe";
+        iframe.setAttribute("sandbox", "allow-same-origin");
+        iframe.setAttribute("title", title.textContent || "");
+        iframe.srcdoc = code;
+        body.appendChild(iframe);
+    } else {
+        // 其它语言直接展示源代码（保留换行 / 空格）
+        const pre = document.createElement("pre");
+        pre.className = "vditor-code-preview-modal__pre";
+        pre.textContent = code;
+        body.appendChild(pre);
+    }
+    modal.classList.add("vditor-code-preview-modal--open");
+};
+
+const closeCodePreviewModal = () => {
+    const modal = document.getElementById(PREVIEW_MODAL_ID);
+    if (modal) {
+        modal.classList.remove("vditor-code-preview-modal--open");
+        // 清空 body 释放 iframe 资源
+        const body = modal.querySelector(".vditor-code-preview-modal__body");
+        if (body) {
+            body.innerHTML = "";
+        }
+    }
+};
+
+const setupPreviewButton = (chrome: ICodeBlockChrome, host: HTMLElement) => {
+    const btn = chrome.previewBtn;
+    if (btn.dataset.previewBound === "true") {
+        return;
+    }
+    btn.dataset.previewBound = "true";
+    btn.addEventListener("mousedown", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+    });
+    btn.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        // 从 CodeMirror 渲染出来的行节点读代码（保证拿到的是用户当前编辑后的最新内容，
+        // 而不是初次挂载时 <code> 里的原始文本）。preview 和 editable 两条路径都会
+        // 渲染 .cm-line，所以这个查询对两种 host 都有效。
+        const lines = Array.from(host.querySelectorAll(".cm-line"));
+        const code = lines.map((line) => line.textContent || "").join("\n");
+        const codeElement = host.querySelector("pre code") as HTMLElement | null;
+        const languageName = codeElement ? getCodeLanguageName(codeElement) : "";
+        openCodePreviewModal(code, languageName);
+    });
+};
+
 export const ensurePreviewCodeBlockChrome = (
     host: HTMLElement,
     languageName: string,
@@ -665,6 +802,7 @@ export const ensurePreviewCodeBlockChrome = (
     host.insertBefore(chrome.root, host.firstChild);
     bindCopyButton(chrome.copyBtn, () => chrome.performCopy());
     setupExpandToggle(chrome, host);
+    setupPreviewButton(chrome, host);
     updateCodeBlockChromeLanguage(host, languageName);
 };
 
@@ -748,6 +886,7 @@ export const ensureCodeBlockChrome = (
             bindThemePanel(vditor, chrome);
         }
         setupExpandToggle(chrome, host);
+        setupPreviewButton(chrome, host);
     }
 
     chrome.performCopy = options.performCopy;

@@ -33,8 +33,12 @@
   position: absolute;
   top: 50%;
   left: 0;
-  transform: translateY(-50%) translateX(-30%);
-  z-index: 12;
+  // translateX 改成 -10% 而不是 -30%，让按钮大部分留在视口内可点击；
+  // 同时升高 z-index 到 1000，避免被同位置的大纲面板（z-index: auto）
+  // 或代码块 chrome (10)、块手柄 (6) 等覆盖导致点不到
+  transform: translateY(-50%) translateX(-10%);
+  z-index: 1000;
+  pointer-events: auto;
   align-items: center;
   justify-content: center;
   width: 24px;
@@ -85,8 +89,11 @@
       position: absolute;
       top: 4px;
       left: 0;
-      transform: translateX(-30%);
-      z-index: 12;
+      // translateX 改成 -10%，让按钮大部分留在视口内可点击
+      transform: translateX(-10%);
+      // 升高 z-index 到 1000 避免被覆盖
+      z-index: 1000;
+      pointer-events: auto;
       width: 24px;
       height: 36px;
       margin: 0;

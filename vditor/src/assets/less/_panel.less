@@ -222,12 +222,12 @@
       --vditor-popover-secondary-btn-bg: color-mix(in srgb, var(--textarea-text-color) 10%, transparent);
       --vditor-popover-secondary-btn-bg-hover: color-mix(in srgb, var(--textarea-text-color) 16%, transparent);
       opacity: 1;
-      min-width: 200px;
-      max-width: min(380px, calc(100vw - 24px));
-      max-height: min(400px, calc(100vh - 24px));
-      padding: 10px 12px;
+      min-width: 260px;
+      max-width: min(480px, calc(100vw - 24px));
+      max-height: min(520px, calc(100vh - 24px));
+      padding: 7px 7px;
       border: 1px solid color-mix(in srgb, var(--toolbar-icon-color) 22%, transparent);
-      border-radius: 8px;
+      border-radius: 10px;
       background: var(--panel-background-color);
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.20), 0 1px 2px rgba(0, 0, 0, 0.12);
       color: var(--textarea-text-color);
@@ -235,83 +235,173 @@
       overflow: hidden;
       box-sizing: border-box;
 
-      .vditor-html-inline-popover__mode-tabs {
-        display: flex;
-        gap: 2px;
-        padding: 4px 0 8px;
-        margin-bottom: 4px;
-        border-bottom: 1px solid color-mix(in srgb, var(--toolbar-icon-color) 10%, transparent);
+      // 让绝对定位的关闭按钮（右上角）以 panel 而非 outer popover 为参照；
+      // outer 是 vditor-panel--html-inline 自己仍在被定位框架控制，会被弹层定位逻辑
+      // 读写 top/left，给它一层 relative 子层更稳定。
+      .vditor-html-inline-popover {
+        position: relative;
       }
 
-      .vditor-html-inline-popover__tab {
-        padding: 3px 12px;
+      // 顶部拖拽胶囊：50% 宽度居中，无图标，靠 cursor + 大圆角告诉用户这是抓手。
+      // touch-action: none 防止移动端的滚动 / 系统手势抢走 pointer 事件。
+      .vditor-html-inline-popover__header {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 50%;
+        height: 15px;
+        margin: 3px auto 10px;
+        cursor: grab;
+        user-select: none;
+        touch-action: none;
+        background: color-mix(in srgb, var(--toolbar-icon-color) 6%, transparent);
+        border-radius: 12px;
+
+        &:active {
+          cursor: grabbing;
+        }
+      }
+
+      // 顶部右上角的关闭按钮：icon-only 按钮，绝对定位到 panel 右上角（紧贴 panel 的 content edge）。
+      // 设 panel 为 position:relative（vditor-html-inline-popover）使此定位生效。
+      .vditor-html-inline-popover__close {
+        position: absolute;
+        top: 0;
+        right: 0;
+        z-index: 1;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 24px;
+        height: 24px;
+        padding: 0;
         border: none;
-        border-radius: 5px;
+        border-radius: 6px;
+        background: #d95757;
+        color: #fff;
+        cursor: pointer;
+        transition: background-color 0.12s ease, color 0.12s ease;
+
+        .vditor-html-inline-popover__button-icon {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          line-height: 1;
+
+          .codicon {
+            font-size: 16px;
+            line-height: 1;
+            pointer-events: none;
+          }
+        }
+
+        &:hover {
+          background: #b91c1c;
+        }
+
+        &:active {
+          background: #991b1b;
+        }
+      }
+
+      // 左上角模式切换按钮：单按钮在 preview / raw 间 toggle，文案显示"目标模式"。
+      // 与右上 close 按钮对称布局，absolute 定位不占文档流，纵向不挤一行。
+      .vditor-html-inline-popover__mode-toggle {
+        position: absolute;
+        top: 0;
+        left: 0;
+        z-index: 1;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        height: 24px;
+        padding: 0 5px;
+        border: none;
+        border-radius: 6px;
         background: transparent;
         color: var(--toolbar-icon-color);
         font-size: 12px;
         font-family: inherit;
         cursor: pointer;
-        transition: background 0.12s ease, color 0.12s ease;
+        transition: background-color 0.12s ease, color 0.12s ease;
 
         &:hover {
           background: color-mix(in srgb, var(--toolbar-icon-color) 8%, transparent);
+          color: var(--vditor-popover-primary-btn-bg, #007aff);
         }
 
-        &--active {
-          background: color-mix(in srgb, var(--vditor-popover-primary-btn-bg, #007aff) 18%, transparent);
-          color: var(--vditor-popover-primary-btn-bg, #007aff);
+        &:active {
+          background: color-mix(in srgb, var(--toolbar-icon-color) 16%, transparent);
         }
       }
 
       .vditor-html-inline-popover__visual-host {
-        min-height: 80px;
-        max-height: 240px;
+        min-height: 110px;
+        max-height: 320px;
         overflow: auto;
-        padding: 8px 10px;
-        margin-bottom: 8px;
-        border-radius: 6px;
+        padding: 10px 12px;
+        margin-bottom: 0px;
+        border-radius: 8px;
         background: color-mix(in srgb, var(--textarea-text-color) 4%, transparent);
         font-family: inherit;
-        font-size: 14px;
+        font-size: 15px;
         line-height: 1.5;
         color: var(--textarea-text-color);
         outline: none;
         white-space: pre-wrap;
         word-break: break-word;
+        // iOS / Chrome 在 contenteditable 上的默认 focus 高亮（蓝色 ring）
+        // 用 box-shadow / outline 两种方式都压一下，避免编辑时四周出现一圈高亮。
+        -webkit-tap-highlight-color: transparent;
 
-        &:focus {
-          box-shadow: 0 0 0 2px color-mix(in srgb, var(--vditor-popover-primary-btn-bg, #007aff) 25%, transparent);
+        &:focus,
+        &:focus-visible {
+          outline: none;
+          box-shadow: none;
+        }
+      }
+
+      // CodeMirror 编辑器（raw 模式 cm-host）同理：cm-focused 由 CodeMirror 自己
+      // 给内部元素加样式，但浏览器仍可能给容器本身画 focus ring——一并压掉。
+      .vditor-html-inline-popover__cm-host {
+        &:focus,
+        &:focus-within,
+        &:focus-visible {
+          outline: none;
+          box-shadow: none;
         }
       }
 
       .vditor-html-inline-popover__color-bar {
         display: flex;
         flex-direction: column;
-        gap: 4px;
-        padding-bottom: 8px;
+        gap: 6px;
+        padding-bottom: 10px;
         border-bottom: 1px solid color-mix(in srgb, var(--toolbar-icon-color) 12%, transparent);
       }
 
       .vditor-html-inline-popover__color-row {
         display: flex;
         align-items: center;
-        gap: 4px;
+        gap: 6px;
       }
 
       .vditor-html-inline-popover__color-label {
-        width: 28px;
-        font-size: 11px;
+        width: 32px;
+        font-size: 12px;
         opacity: 0.7;
         flex-shrink: 0;
+        align-items: center;
+        justify-content: center;
+        padding-left: 3px;
       }
 
       .vditor-html-inline-popover__color-swatch {
-        width: 18px;
-        height: 18px;
+        width: 22px;
+        height: 22px;
         padding: 0;
         border: 1px solid color-mix(in srgb, var(--toolbar-icon-color) 25%, transparent);
-        border-radius: 3px;
+        border-radius: 4px;
         cursor: pointer;
         transition: transform 0.08s ease, box-shadow 0.08s ease;
 
@@ -323,26 +413,28 @@
 
       .vditor-html-inline-popover__actions {
         display: flex;
-        align-items: center;
+        align-items: flex-end;
         justify-content: space-between;
-        gap: 8px;
-        padding-top: 2px;
+        gap: 10px;
+        // bottom 跟 Save 的 2px 留白对齐——三个按钮共享同一条基线。
+        // right 给 Save 浮层让出宽度，避免 wrap/clear 撞上。
+        padding: 4px 80px 2px 0;
       }
 
       .vditor-html-inline-popover__actions-buttons {
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: 10px;
         flex-shrink: 0;
       }
 
       .vditor-html-inline-popover__hint {
         flex-shrink: 0;
-        font-size: 11px;
+        font-size: 12px;
         color: var(--textarea-text-color);
         opacity: 0.45;
         white-space: nowrap;
-        padding: 2px 4px;
+        padding: 3px 6px;
         user-select: none;
         pointer-events: none;
         display: none;
@@ -352,10 +444,10 @@
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        min-width: 50px;
-        padding: 5px 14px;
-        border-radius: 7px;
-        font-size: 12px;
+        min-width: 56px;
+        padding: 7px 1px;
+        border-radius: 8px;
+        font-size: 13px;
         font-family: inherit;
         line-height: 1.4;
         cursor: pointer;
@@ -375,6 +467,11 @@
           background: var(--vditor-popover-primary-btn-bg);
           color: var(--vditor-popover-primary-btn-fg);
           font-weight: 500;
+          // 浮到 panel 右下角：靠 panel 自己的 position:relative 锚定；
+          // bottom 与 actions 的 padding-bottom 同步，保证三个按钮共享同一条基线。
+          position: absolute;
+          bottom: 2px;
+          right: 0;
 
           &:hover {
             background: var(--vditor-popover-primary-btn-bg-hover);
@@ -386,8 +483,8 @@
         }
 
         &--wrap {
-          min-width: 28px;
-          padding: 5px 8px;
+          min-width: 32px;
+          padding: 6px 10px;
           color: var(--toolbar-icon-color);
 
           .vditor-html-inline-popover__button-icon {

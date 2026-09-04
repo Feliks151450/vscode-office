@@ -6,6 +6,7 @@
     <title>Vditor Demo</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="stylesheet" href="./dist/index.css">
+    <script src="ios-callout-killer.js"></script>
     <style>
         * { box-sizing: border-box; }
         html, body {
@@ -269,7 +270,7 @@
             mode: "insert",      // "insert" = 工具栏按钮（写到光标）；"replace" = 点击现有公式（就地替换）
             targetMath: null,    // replace 模式下被点击的公式元素 {kind:'inline'|'block', el:HTMLElement}
         };
-        window.vditorDebug = false
+        window.vditorDebug =  true
         window.BG_COLORS = [
             "#ffffff", // red-200
             "#fed7aa", // orange-200
@@ -290,6 +291,8 @@
             "#475569", // slate
             "#000000", // black
         ];
+        window.defaultValue = "# Hello Vditor\n\n这是一个 **Vditor** 示例页面。\n\n## 功能演示\n\n- **粗体** / *斜体* / ~~删除线~~\n- `行内代码`\n- [链接](https://github.com)\n\n```javascript\nconsole.log('Hello World');\n```\n\n> 引用内容\n\n| 列1 | 列2 | 列3 |\n|-----|-----|-----|\n| A   | B   | C   |\n\n## HTML 代码块\n\n行内 HTML（直接渲染）：这是一段 <span style=\"color: #dc2626;\">红色文字</span>，\n紧接 <span style=\"background-color: #fed7aa;\">橙色背景</span>，\n双击即可进入 html-inline 编辑。\n\n个人资料卡片（带统计）：\n\n```html\n<style>\n  body { margin: 0; font-family: system-ui, sans-serif; background: #f5f7fa; padding: 24px; }\n  .card { background: #fff; border-radius: 12px; padding: 24px; box-shadow: 0 4px 16px rgba(0,0,0,.08); max-width: 360px; }\n  .avatar { width: 64px; height: 64px; border-radius: 50%; background: linear-gradient(135deg, #667eea, #764ba2); display: inline-flex; align-items: center; justify-content: center; color: #fff; font-size: 24px; font-weight: bold; }\n  h2 { margin: 16px 0 4px; color: #1a202c; font-size: 18px; }\n  .role { color: #718096; font-size: 14px; }\n  .badge { display: inline-block; padding: 4px 10px; background: #c6f6d5; color: #22543d; border-radius: 12px; font-size: 12px; font-weight: 500; margin-top: 12px; }\n  .stats { display: flex; gap: 16px; margin-top: 16px; padding-top: 16px; border-top: 1px solid #e2e8f0; }\n  .stat { flex: 1; text-align: center; }\n  .stat-value { font-size: 20px; font-weight: 600; color: #2d3748; }\n  .stat-label { font-size: 12px; color: #a0aec0; text-transform: uppercase; letter-spacing: .5px; margin-top: 2px; }\n</style>\n<div class=\"card\">\n  <div class=\"avatar\">FL</div>\n  <h2>Feliks Lin</h2>\n  <div class=\"role\">前端工程师</div>\n  <span class=\"badge\">✓ 已认证</span>\n  <div class=\"stats\">\n    <div class=\"stat\"><div class=\"stat-value\">128</div><div class=\"stat-label\">文章</div></div>\n    <div class=\"stat\"><div class=\"stat-value\">2.4k</div><div class=\"stat-label\">关注者</div></div>\n    <div class=\"stat\"><div class=\"stat-value\">86</div><div class=\"stat-label\">获赞</div></div>\n  </div>\n</div>\n```\n\n价格卡片（三档对比，中间突出）：\n\n```html\n<style>\n  body { margin: 0; font-family: system-ui, sans-serif; background: #f5f7fa; padding: 24px; }\n  .pricing { display: flex; gap: 16px; align-items: stretch; }\n  .plan { background: #fff; border-radius: 12px; padding: 24px; flex: 1; box-shadow: 0 2px 8px rgba(0,0,0,.06); transition: transform .2s; }\n  .plan.featured { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; transform: scale(1.05); box-shadow: 0 8px 24px rgba(102,126,234,.35); }\n  .plan-name { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; opacity: .7; }\n  .price { font-size: 36px; font-weight: 700; margin: 8px 0 4px; color: inherit; }\n  .price small { font-size: 14px; opacity: .7; font-weight: 400; }\n  ul { list-style: none; padding: 0; margin: 16px 0 20px; }\n  li { padding: 6px 0; font-size: 14px; }\n  li::before { content: \"✓ \"; margin-right: 6px; font-weight: bold; }\n  button { width: 100%; padding: 10px; border: none; border-radius: 6px; background: #2d3748; color: #fff; font-weight: 600; cursor: pointer; font-size: 14px; }\n  .plan.featured button { background: #fff; color: #667eea; }\n  button:hover { opacity: .9; }\n</style>\n<div class=\"pricing\">\n  <div class=\"plan\">\n    <div class=\"plan-name\">基础版</div>\n    <div class=\"price\">¥29<small>/月</small></div>\n    <ul><li>5 个项目</li><li>10GB 存储</li><li>邮件支持</li></ul>\n    <button>选择</button>\n  </div>\n  <div class=\"plan featured\">\n    <div class=\"plan-name\">★ 推荐</div>\n    <div class=\"price\">¥99<small>/月</small></div>\n    <ul><li>无限项目</li><li>100GB 存储</li><li>24/7 优先支持</li><li>高级分析</li></ul>\n    <button>立即升级</button>\n  </div>\n  <div class=\"plan\">\n    <div class=\"plan-name\">企业版</div>\n    <div class=\"price\">¥299<small>/月</small></div>\n    <ul><li>所有功能</li><li>SSO 集成</li><li>专属客户经理</li><li>SLA 99.99%</li></ul>\n    <button>联系销售</button>\n  </div>\n</div>\n```\n\n消息通知（4 种状态，左边色条 + 圆形 icon）：\n\n```html\n<style>\n  body { margin: 0; font-family: system-ui, sans-serif; background: #f5f7fa; padding: 24px; max-width: 480px; }\n  .toast { background: #fff; border-radius: 8px; padding: 14px 18px; margin-bottom: 10px; box-shadow: 0 2px 12px rgba(0,0,0,.08); display: flex; align-items: center; gap: 12px; border-left: 4px solid; }\n  .toast.info    { border-color: #3182ce; }\n  .toast.success { border-color: #38a169; }\n  .toast.warning { border-color: #dd6b20; }\n  .toast.error   { border-color: #e53e3e; }\n  .icon { width: 30px; height: 30px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color: #fff; flex-shrink: 0; font-weight: bold; font-size: 14px; }\n  .info .icon    { background: #3182ce; }\n  .success .icon { background: #38a169; }\n  .warning .icon { background: #dd6b20; }\n  .error .icon   { background: #e53e3e; }\n  .content { flex: 1; min-width: 0; }\n  .title { font-weight: 600; color: #1a202c; font-size: 14px; }\n  .desc  { color: #718096; font-size: 13px; margin-top: 2px; }\n  .close { color: #a0aec0; cursor: pointer; font-size: 20px; line-height: 1; padding: 0 4px; }\n</style>\n<div class=\"toast info\">\n  <div class=\"icon\">i</div>\n  <div class=\"content\"><div class=\"title\">新版本已发布</div><div class=\"desc\">Vditor 4.2 增加了多项新功能</div></div>\n  <div class=\"close\">×</div>\n</div>\n<div class=\"toast success\">\n  <div class=\"icon\">✓</div>\n  <div class=\"content\"><div class=\"title\">保存成功</div><div class=\"desc\">文档已自动保存到云端</div></div>\n  <div class=\"close\">×</div>\n</div>\n<div class=\"toast warning\">\n  <div class=\"icon\">!</div>\n  <div class=\"content\"><div class=\"title\">未保存的更改</div><div class=\"desc\">关闭窗口前请先保存你的编辑</div></div>\n  <div class=\"close\">×</div>\n</div>\n<div class=\"toast error\">\n  <div class=\"icon\">✕</div>\n  <div class=\"content\"><div class=\"title\">网络连接失败</div><div class=\"desc\">请检查网络后重试</div></div>\n  <div class=\"close\">×</div>\n</div>\n```\n\n## 数学公式 (MathJax)\n\n行内公式示例：欧拉恒等式 $e^{i\\pi} + 1 = 0$ 是数学里最优雅的等式之一；\n勾股定理 $a^2 + b^2 = c^2$ 描述直角三角形三边关系；\n正态分布概率密度 $f(x) = \\frac{1}{\\sqrt{2\\pi}\\sigma} e^{-\\frac{(x-\\mu)^2}{2\\sigma^2}}$ 在统计学里无处不在。\n\n行间公式示例（前两个为双美元形式，其余为代码块形式）：\n\n$$\n\\int_{-\\infty}^{\\infty} e^{-x^2} \\, dx = \\sqrt{\\pi}\n$$\n\n$$\n\\sum_{n=1}^{\\infty} \\frac{1}{n^2} = \\frac{\\pi^2}{6}\n$$\n\n```math\n\\begin{pmatrix}\na & b \\\\\nc & d\n\\end{pmatrix}\n\\begin{pmatrix}\nx \\\\\ny\n\\end{pmatrix}\n=\n\\begin{pmatrix}\nax + by \\\\\ncx + dy\n\\end{pmatrix}\n```\n\n```math\n\\nabla \\times \\vec{\\mathbf{B}} - \\frac{1}{c} \\frac{\\partial \\vec{\\mathbf{E}}}{\\partial t} = \\frac{4\\pi}{c} \\vec{\\mathbf{j}}\n```\n\n复杂嵌套：\n\n行内混合测试 — $E = mc^2$ 与 $\\sqrt[3]{x^2 + y^2}$ 紧邻，\n外加希腊字母 $\\alpha, \\beta, \\gamma, \\delta, \\theta, \\lambda, \\mu, \\pi, \\omega$，\n以及运算符 $\\sum, \\prod, \\int, \\partial, \\nabla, \\pm, \\times, \\div, \\neq, \\approx, \\equiv, \\Rightarrow, \\Leftrightarrow$。\n\n```math\n\\frac{\\partial}{\\partial t} \\left( \\rho \\vec{v} \\right) + \\nabla \\cdot \\left( \\rho \\vec{v} \\otimes \\vec{v} \\right) = -\\nabla p + \\mu \\nabla^2 \\vec{v} + \\rho \\vec{g}\n```\n\n化学方程式（mhchem 扩展）：\n\n行内 $\\ce{H2O}$ 与 $\\ce{CO2 + H2O -> H2CO3}$。\n\n```math\n\\ce{Zn^2+ + 2OH- ->[\\Delta] ZnO + H2O}\n```\n";
+        // window.defaultValue = "这是一个 **Vditor** <span style=\"background-color: rgb(254, 215, 170);\">示例<span style=\"color: rgb(220, 38, 38);\">页面</span></span>";
 
 
         function openLatexModal(vditor, seed, options) {
@@ -310,6 +313,7 @@
                 iframe.src = "./latexEditor/latexEditor.html";
             }, 0);
         }
+        window.openLatexModal = openLatexModal;
 
         function closeLatexModal() {
             document.getElementById("latexModal").classList.remove("latex-modal-mask--open");
@@ -699,6 +703,7 @@
                         // sup/sub 当前 preview API 未暴露，会被忽略
                       },
                     },
+                    enableContextMenu:false,
                     toolbar: [
                         "outline",
                         "headings",
@@ -735,12 +740,19 @@
                         "undo",
                         "redo",
                     ],
-                    value: "# Hello Vditor\n\n这是一个 **Vditor** 示例<span style='color:red'>页面</span>。\n\n## 功能演示\n\n- **粗体** / *斜体* / ~~删除线~~\n- `行内代码`\n- [链接](https://github.com)\n\n```javascript\nconsole.log('Hello World');\n```\n\n> 引用内容\n\n| 列1 | 列2 | 列3 |\n|-----|-----|-----|\n| A   | B   | C   |\n\n## 数学公式 (MathJax)\n\n行内公式示例：欧拉恒等式 $e^{i\\pi} + 1 = 0$ 是数学里最优雅的等式之一；\n勾股定理 $a^2 + b^2 = c^2$ 描述直角三角形三边关系；\n正态分布概率密度 $f(x) = \\frac{1}{\\sqrt{2\\pi}\\sigma} e^{-\\frac{(x-\\mu)^2}{2\\sigma^2}}$ 在统计学里无处不在。\n\n行间公式示例（前两个为双美元形式，其余为代码块形式）：\n\n$$\n\\int_{-\\infty}^{\\infty} e^{-x^2} \\, dx = \\sqrt{\\pi}\n$$\n\n$$\n\\sum_{n=1}^{\\infty} \\frac{1}{n^2} = \\frac{\\pi^2}{6}\n$$\n\n```math\n\\begin{pmatrix}\na & b \\\\\nc & d\n\\end{pmatrix}\n\\begin{pmatrix}\nx \\\\\ny\n\\end{pmatrix}\n=\n\\begin{pmatrix}\nax + by \\\\\ncx + dy\n\\end{pmatrix}\n```\n\n```math\n\\nabla \\times \\vec{\\mathbf{B}} - \\frac{1}{c} \\frac{\\partial \\vec{\\mathbf{E}}}{\\partial t} = \\frac{4\\pi}{c} \\vec{\\mathbf{j}}\n```\n\n复杂嵌套：\n\n行内混合测试 — $E = mc^2$ 与 $\\sqrt[3]{x^2 + y^2}$ 紧邻，\n外加希腊字母 $\\alpha, \\beta, \\gamma, \\delta, \\theta, \\lambda, \\mu, \\pi, \\omega$，\n以及运算符 $\\sum, \\prod, \\int, \\partial, \\nabla, \\pm, \\times, \\div, \\neq, \\approx, \\equiv, \\Rightarrow, \\Leftrightarrow$。\n\n```math\n\\frac{\\partial}{\\partial t} \\left( \\rho \\vec{v} \\right) + \\nabla \\cdot \\left( \\rho \\vec{v} \\otimes \\vec{v} \\right) = -\\nabla p + \\mu \\nabla^2 \\vec{v} + \\rho \\vec{g}\n```\n\n化学方程式（mhchem 扩展）：\n\n行内 $\\ce{H2O}$ 与 $\\ce{CO2 + H2O -> H2CO3}$。\n\n```math\n\\ce{Zn^2+ + 2OH- ->[\\Delta] ZnO + H2O}\n```\n",
+                    value: defaultValue,
                     // 编辑器异步渲染完成后 vditor.vditor.wysiwyg.element 才挂载——必须在这时
                     // 才能绑 click 监听，否则拿到的 editorEl 为 undefined。
                     after() {
                         vdLog("[latex-modal] Vditor after() fired, binding math click now");
                         bindMathClickToOpenEditor();
+                        // IosCalloutKiller.init({
+                        //   clearDelay: 100,          // 清选区延迟(ms)，实测下限约 50
+                        //   restoreDelay: 1,         // 补回延迟(ms)
+                        //   ignoreEditable: false,   // 可编辑区域内的选中同样拦截（面板可切换）
+                        //   onIntercept: function (text) { console.log('intercept:'); },  // 菜单被掐灭时通知（text = 选中内容）
+                        //   onRestore:   function (text) { console.log('restore:', text); },  // 选区补回后通知
+                        // });
                     },
                 });
                 // 挂到全局，方便在控制台调试：window.vditor.getValue() / window.vditor.getHTML()
@@ -762,6 +774,7 @@
                 document.getElementById("vditor").innerHTML = "<p style='color:red;padding:20px'>初始化失败: " + e.message + "</p>";
             }
         });
+
     </script>
 </body>
 

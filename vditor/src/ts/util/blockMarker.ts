@@ -1,4 +1,4 @@
-const BLOCK_MARKER_HANDLE_SIZE = 20;
+const BLOCK_MARKER_HANDLE_SIZE = 28;
 const BLOCK_MARKER_MAX_TOP = 6;
 
 export const getBlockMarkerTop = (block: HTMLElement) => {

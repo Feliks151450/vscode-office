@@ -44,6 +44,15 @@
             }
         });
     </script>
+    <script src="ios-callout-killer.js"></script>
+    <script>
+      IosCalloutKiller.init({
+        clearDelay: 500,          // 清选区延迟(ms)，实测下限约 50
+        restoreDelay: 0,         // 补回延迟(ms)
+        onIntercept: function (text) { console.log('intercept:', text); },  // 菜单被掐灭时通知（text = 选中内容）
+        onRestore:   function (text) { console.log('restore:', text); },  // 选区补回后通知
+      });
+    </script>
 </body>
 
 </html>

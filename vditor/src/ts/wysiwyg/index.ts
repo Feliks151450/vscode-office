@@ -55,6 +55,7 @@ import { focusWysiwygCodeBlock, showCode } from "./showCode";
 import { getMarkdown } from "../markdown/getMarkdown";
 import { fireContentInput } from "../util/saveToolbarState";
 import { initBlockHandle } from "./blockHandle";
+import { initBlockMenu } from "./blockMenu";
 import { initBubbleMenu } from "./bubbleMenu";
 import { initContextMenu } from "./contextMenu";
 import { linkClickEvent } from "../util/linkClick";
@@ -89,6 +90,7 @@ class WYSIWYG {
         this.bindEvent(vditor);
 
         initBlockHandle(vditor, divElement, this.element);
+        initBlockMenu(vditor, this.element);
         initTableHandle(vditor, divElement, this.element);
         initBubbleMenu(vditor, this.element);
         initContextMenu(vditor, this.element);

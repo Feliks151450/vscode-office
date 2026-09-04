@@ -275,15 +275,39 @@ export const enterInlineMathEdit = (vditor: IVditor, fromEl: HTMLElement, focusA
     containerEl.classList.add("vditor-math-inline--editing");
 
     const existing = bindings.get(containerEl);
-    if (existing?.view.dom.isConnected) {
-        existing.vditor = vditor;
-        focusInlineMathView(existing.view);
-        const pos = focusAtStart ? 0 : existing.view.state.doc.length;
-        existing.view.dispatch({ selection: { anchor: pos, head: pos }, scrollIntoView: false });
-        return true;
-    }
     if (existing) {
-        bindings.delete(containerEl);
+        // containerEl 已被 SpinVditorDOM / 编辑器重建流程替换：binding 指向 detached DOM，
+        // 真销毁 view 避免内存泄漏，然后走新建路径。
+        if (!existing.containerEl.isConnected) {
+            console.log("[math] enter: stale binding → view.destroy()", {
+                liveViewCount: bindings.size - 1,
+                formula: getCodeText(existing.codeEl).slice(0, 80),
+            });
+            existing.view.destroy();
+            bindings.delete(containerEl);
+        } else {
+            // 复用现有 view：取消隐藏 + 把 codeEl 当前文本灌回（隐藏期可能被外部改动）
+            // + 焦点入 view。光标位置按 focusAtStart 决定；进入时 view.doc 已被清空，
+            // 长度就是 current 公式长度。
+            existing.vditor = vditor;
+            existing.host.style.display = "";
+            const text = getCodeText(existing.codeEl);
+            const len = existing.view.state.doc.length;
+            if (text.length > 0 || len > 0) {
+                existing.view.dispatch({
+                    changes: { from: 0, to: len, insert: text },
+                });
+            }
+            focusInlineMathView(existing.view);
+            const pos = focusAtStart ? 0 : existing.view.state.doc.length;
+            existing.view.dispatch({ selection: { anchor: pos, head: pos }, scrollIntoView: false });
+            console.log("[math] enter: reuse existing view (no rebuild)", {
+                liveViewCount: bindings.size,
+                formula: text.slice(0, 80),
+                docLength: existing.view.state.doc.length,
+            });
+            return true;
+        }
     }
 
     host.querySelectorAll(".cm-editor").forEach((editor) => editor.remove());
@@ -375,6 +399,11 @@ export const enterInlineMathEdit = (vditor: IVditor, fromEl: HTMLElement, focusA
     binding.view = view;
     bindings.set(containerEl, binding);
 
+    console.log("[math] enter: create new EditorView", {
+        liveViewCount: bindings.size,
+        formula: getCodeText(codeEl).slice(0, 80),
+    });
+
     focusInlineMathView(view);
     const pos = focusAtStart ? 0 : view.state.doc.length;
     view.dispatch({ selection: { anchor: pos, head: pos }, scrollIntoView: false });
@@ -384,15 +413,29 @@ export const enterInlineMathEdit = (vditor: IVditor, fromEl: HTMLElement, focusA
 export const exitInlineMathEdit = (containerEl: HTMLElement) => {
     const binding = bindings.get(containerEl);
     if (!binding) {
+        console.log("[math] exit: no binding (nothing to hide)", {
+            liveViewCount: bindings.size,
+        });
         containerEl.classList.remove("vditor-math-inline--editing");
         containerEl.removeAttribute("contenteditable");
         return;
     }
     window.clearTimeout(binding.previewTimer);
-    syncCodeFromView(binding);
-    binding.view.destroy();
-    bindings.delete(containerEl);
-    binding.host.querySelector(".cm-editor")?.remove();
+    // 编辑过程中 update listener 已经把 view.doc 实时同步到 codeEl 了，退出时
+    // 不必再 syncCodeFromView。隐藏即可（hide-don't-destroy）：下次 enter 重用同一
+    // 个 EditorView 实例，跳过 Compartment / latexSupport / 装饰器的初始化。
+    const view = binding.view;
+    const pendingFormula = view.state.doc.toString();
+    if (view.state.doc.length > 0) {
+        view.dispatch({
+            changes: { from: 0, to: view.state.doc.length, insert: "" },
+        });
+    }
+    binding.host.style.display = "none";
     containerEl.classList.remove("vditor-math-inline--editing");
     containerEl.removeAttribute("contenteditable");
+    console.log("[math] exit: clear doc + hide view (view kept alive)", {
+        liveViewCount: bindings.size,
+        discardedFormula: pendingFormula.slice(0, 80),
+    });
 };

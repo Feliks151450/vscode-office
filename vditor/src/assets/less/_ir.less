@@ -6,6 +6,10 @@
   width: 100%;
 
   pre.vditor-reset {
+    // 块操作按钮（添加 / 拖拽）改贴最左后，需要给触屏按钮（28+4+28=60px）留出
+    // 至少 12px 间距；76 = 60(button width) + 12(gap) + 4(已含的 HANDLE_GAP 余量)
+    padding-left: 70px;
+
     // 首块与编辑器顶部保持间距（标题除外，沿用全局 24px）
     // boundary 哨兵不占空间但可能是 first-child，需用相邻兄弟选择器兜底
     > :first-child:not(.vditor-editor-boundary),
