@@ -156,7 +156,8 @@ export class Outline {
             return;
         }
         setMobileOutlineDrawerOpen(vditor, false);
-        this.element.style.display = "none";
+        // 不要设 display: none，display 不可 transition 会让后续滑入动画跳过。
+        // 抽屉关闭态完全由 CSS opacity + transform 控制。
         this.element.classList.remove("vditor-outline--mobile-open");
         syncMobileOutlinePanel(vditor, false);
         this.unbindScrollSpyListener();
@@ -167,6 +168,12 @@ export class Outline {
             return;
         }
         this.element.classList.remove("vditor-outline--mobile-open");
+        // 自动从移动模式恢复时，如果大纲里没有任何 heading 就别显示空面板；
+        // 工具栏按钮的 toggle / EditMode 切换的 toggle 不受此影响——用户主动点仍会显示。
+        if (!this.hasContent()) {
+            this.element.style.display = "none";
+            return;
+        }
         this.toggle(vditor, vditor.options.outline.enable);
     }
 
@@ -201,7 +208,8 @@ export class Outline {
         } else {
             if (mobileLayout) {
                 setMobileOutlineDrawerOpen(vditor, false);
-                this.element.style.display = "none";
+                // 关闭抽屉：只移除 class 让 CSS 滑出动画播放，
+                // 不要设 display: none（display 不可 transition，会跳变）
                 this.element.classList.remove("vditor-outline--mobile-open");
             } else {
                 this.element.style.display = "none";
@@ -223,5 +231,13 @@ export class Outline {
                 // vditor[vditor.currentMode].element.focus();
             }
         }
+    }
+
+    /**
+     * 大纲面板当前是否有内容（至少一个 H1-H6 heading）。
+     * 直接查 DOM（不重新 render 触发开销），返回 boolean。
+     */
+    public hasContent(): boolean {
+        return this.contentElement.querySelectorAll("ul > li").length > 0;
     }
 }

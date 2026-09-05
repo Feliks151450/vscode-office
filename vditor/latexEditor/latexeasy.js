@@ -21842,7 +21842,14 @@ function() {
                     }
                 },
                 setViewBox: function(t, e, i, n) {
-                    return this.node.setAttribute("viewBox", [t, e, i, n].join(" ")),
+                    // viewBox 的 min-x / min-y **允许为负**，且 LatexEasy 就靠这个居中：
+                    // setCanvasToCenter (line 29116) 传 (-width/2, -height/2) 把画布原点
+                    // 挪到中心。之前这里把前两个参数也 clamp 成 >= 0，直接把公式 / 占位符
+                    // 钉死在画布左上角。只有 width / height 必须为正——负值浏览器报错、
+                    // 0 值整个 SVG 不渲染，所以只 clamp 后两个（写成 v > eps ? v : eps，
+                    // 顺带把 NaN 也兜到 eps）。
+                    var _eps = 0.001, _clip = function(v) { return v > _eps ? v : _eps; };
+                    return this.node.setAttribute("viewBox", [t, e, _clip(i), _clip(n)].join(" ")),
                     this
                 }
             })

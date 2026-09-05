@@ -27,6 +27,8 @@ interface IBubblePaletteState {
     anchorButton: HTMLElement | null;
     renderText: (colors: readonly string[]) => void;
     renderBg: (colors: readonly string[]) => void;
+    /** Pin 模式下不会随气泡菜单一起关闭，也不会被外部点击关闭 */
+    pinned: boolean;
 }
 
 const menuMap = new WeakMap<IVditor, IBubbleMenuState>();
@@ -38,7 +40,6 @@ const FORMAT_ITEMS = [
     { name: "italic", icon: "italic" },
     { name: "strike", icon: "strikethrough" },
     { name: "text-color", icon: "symbol-color" },
-    { name: "highlight", icon: "paintcan" },
     { name: "inline-code", icon: "symbol-text" },
     { name: "code", icon: "code" },
     { name: "link", icon: "link" },
@@ -288,6 +289,60 @@ const createColorPaletteElement = (vditor: IVditor): {
     const palette = document.createElement("div");
     palette.className = BUBBLE_PALETTE_CLASS;
 
+    // 顶部三段式：清除颜色（左）+ 拖拽抓手（中）+ close（右），参考 html-inline popover 的 header 布局。
+    // 不再有独立的 pin 按钮——点击拖拽抓手或实际拖动面板都会自动进入 pin 模式，
+    // 视觉态由拖拽抓手本身的 --pinned class 体现。
+    const header = document.createElement("div");
+    header.className = `${BUBBLE_PALETTE_CLASS}__header`;
+
+    // 清除颜色按钮：icon-only，跟 ×close 同一行，避免单独占一行
+    const clearBtn = document.createElement("button");
+    clearBtn.type = "button";
+    clearBtn.className = `${BUBBLE_PALETTE_CLASS}__clear`;
+    clearBtn.setAttribute("aria-label", "清除颜色");
+    clearBtn.innerHTML = `<span class="${BUBBLE_PALETTE_CLASS}__button-icon">${codicon("trash")}</span>`;
+    clearBtn.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        clearSelectionColors(vditor);
+        hideColorPalette(vditor);
+        hideBubbleMenu(vditor);
+    });
+
+    const dragHandle = document.createElement("div");
+    dragHandle.className = `${BUBBLE_PALETTE_CLASS}__drag`;
+    dragHandle.setAttribute("aria-label", "抓取面板（点击或拖动会自动锁定面板）");
+
+    const closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.className = `${BUBBLE_PALETTE_CLASS}__close`;
+    closeBtn.setAttribute("aria-label", "关闭面板（同时退出锁定）");
+    closeBtn.innerHTML = `<span class="${BUBBLE_PALETTE_CLASS}__button-icon">${codicon("close")}</span>`;
+    closeBtn.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        // 关闭按钮无视 pin 状态，强制关闭；同时清掉 --pinned class，
+        // 不然下次打开面板时抓手还带着锁定高亮
+        const state = paletteMap.get(vditor);
+        if (state) {
+            state.pinned = false;
+            palette.classList.remove(`${BUBBLE_PALETTE_CLASS}__pinned`);
+            state.element.classList.remove(BUBBLE_PALETTE_VISIBLE_CLASS);
+            state.visible = false;
+            if (state.anchorButton) {
+                state.anchorButton.classList.remove(`${BUBBLE_MENU_CLASS}__btn--active`);
+                state.anchorButton = null;
+            }
+        }
+        hideBubbleMenu(vditor);
+    });
+
+    header.append(clearBtn, dragHandle, closeBtn);
+    palette.appendChild(header);
+
+    // 拖拽逻辑：参考 htmlInlineEditor.ts 的 makePopoverDraggable
+    makePaletteDraggable(palette, dragHandle, vditor);
+
     /** 构建一行（标题 + 可重绘的色块区），render 在每次显示时用最新颜色数组重绘色块 */
     const buildRow = (label: string, apply: (color: string) => void) => {
         const row = document.createElement("div");
@@ -319,19 +374,6 @@ const createColorPaletteElement = (vditor: IVditor): {
         return { row, render };
     };
 
-    const clearBtn = document.createElement("button");
-    clearBtn.type = "button";
-    clearBtn.className = `${BUBBLE_PALETTE_CLASS}__clear`;
-    clearBtn.textContent = "清除颜色";
-    clearBtn.addEventListener("mousedown", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        clearSelectionColors(vditor);
-        hideColorPalette(vditor);
-        hideBubbleMenu(vditor);
-    });
-    palette.appendChild(clearBtn);
-
     const textRow = buildRow("文字", (color) => {
         setSelectionColor(vditor, { color });
     });
@@ -348,6 +390,89 @@ const createColorPaletteElement = (vditor: IVditor): {
         renderText: textRow.render,
         renderBg: bgRow.render,
     };
+};
+
+/**
+ * 让 palette 面板可以拖拽移动。逻辑参考 htmlInlineEditor.ts 的 makePopoverDraggable：
+ * 拖动时切换到 position: fixed 让面板固定在视口某点，松手后保留新位置。
+ * 拖动期间会顺手把面板标记为 pinned——抓一下或拖一下就锁定，跟外层关闭逻辑解耦。
+ */
+const makePaletteDraggable = (palette: HTMLElement, handle: HTMLElement, vditor: IVditor) => {
+    let offsetX = 0;
+    let offsetY = 0;
+    let activePointerId: number | null = null;
+    let didMove = false;
+
+    const lockPalette = () => {
+        const state = paletteMap.get(vditor);
+        if (state && !state.pinned) {
+            state.pinned = true;
+            palette.classList.add(`${BUBBLE_PALETTE_CLASS}__pinned`);
+        }
+    };
+
+    const onPointerMove = (e: PointerEvent) => {
+        if (e.pointerId !== activePointerId) return;
+        if (!didMove) {
+            // 第一次真的移动时锁定面板（pointerdown 时已经锁了一次，这里是兜底）
+            lockPalette();
+            didMove = true;
+        }
+        // 真正开始拖了就切到 fixed，避免 absolute 跟随容器坐标系
+        if (palette.style.position !== "fixed") {
+            const rect = palette.getBoundingClientRect();
+            palette.style.position = "fixed";
+            palette.style.left = `${rect.left}px`;
+            palette.style.top = `${rect.top}px`;
+            palette.style.right = "auto";
+            offsetX = e.clientX - rect.left;
+            offsetY = e.clientY - rect.top;
+        }
+        const maxLeft = window.innerWidth - 40;
+        const maxTop = window.innerHeight - 30;
+        const newLeft = Math.max(
+            -palette.offsetWidth / 2,
+            Math.min(e.clientX - offsetX, maxLeft),
+        );
+        const newTop = Math.max(
+            0,
+            Math.min(e.clientY - offsetY, maxTop),
+        );
+        palette.style.left = `${newLeft}px`;
+        palette.style.top = `${newTop}px`;
+    };
+
+    const endDrag = (e: PointerEvent) => {
+        if (e.pointerId !== activePointerId) return;
+        activePointerId = null;
+        handle.removeEventListener("pointermove", onPointerMove);
+        handle.removeEventListener("pointerup", endDrag);
+        handle.removeEventListener("pointercancel", endDrag);
+    };
+
+    handle.addEventListener("pointerdown", (e: PointerEvent) => {
+        if (e.button !== 0) return;
+        // 抓手上的 button 等元素不被吞掉
+        if ((e.target as HTMLElement).closest("button, input, textarea, [contenteditable]")) {
+            return;
+        }
+        e.preventDefault();
+        activePointerId = e.pointerId;
+        try {
+            handle.setPointerCapture(e.pointerId);
+        } catch {
+            // 旧浏览器或非 pointer 场景兜底
+        }
+        // 点击拖拽抓手 → 自动进入 pin 模式（也保证"光点不拖"也是 pin）
+        lockPalette();
+        // 记录初始偏移
+        const rect = palette.getBoundingClientRect();
+        offsetX = e.clientX - rect.left;
+        offsetY = e.clientY - rect.top;
+        handle.addEventListener("pointermove", onPointerMove);
+        handle.addEventListener("pointerup", endDrag);
+        handle.addEventListener("pointercancel", endDrag);
+    });
 };
 
 const positionBubbleMenu = (menu: HTMLElement, range: Range) => {
@@ -449,6 +574,10 @@ const showColorPalette = (
 const hideColorPalette = (vditor: IVditor) => {
     const state = paletteMap.get(vditor);
     if (!state) return;
+    // Pin 模式下不响应外部关闭请求（点击空白处、滚动、气泡菜单消失等）
+    if (state.pinned) {
+        return;
+    }
     state.element.classList.remove(BUBBLE_PALETTE_VISIBLE_CLASS);
     state.visible = false;
     if (state.anchorButton) {
@@ -584,6 +713,7 @@ export const initBubbleMenu = (vditor: IVditor, editorElement: HTMLElement) => {
         anchorButton: null,
         renderText: paletteResult.renderText,
         renderBg: paletteResult.renderBg,
+        pinned: false,
     });
 
     document.addEventListener("selectionchange", () => {

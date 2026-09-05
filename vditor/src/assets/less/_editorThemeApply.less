@@ -31,18 +31,19 @@
 #vditor[data-editor-theme] .vditor-mobile-outline-trigger.vditor-mobile-outline-trigger--desktop {
   display: inline-flex !important;
   position: absolute;
-  top: 50%;
+  // 固定在左上角，避免原本左侧中间位置挤占编辑区；top 与移动端保持一致
+  top: 8px;
   left: 0;
   // translateX 改成 -10% 而不是 -30%，让按钮大部分留在视口内可点击；
   // 同时升高 z-index 到 1000，避免被同位置的大纲面板（z-index: auto）
   // 或代码块 chrome (10)、块手柄 (6) 等覆盖导致点不到
-  transform: translateY(-50%) translateX(-10%);
+  transform: translateX(-10%);
   z-index: 1000;
   pointer-events: auto;
   align-items: center;
   justify-content: center;
   width: 24px;
-  height: 48px;
+  height: 36px;
   margin: 0;
   padding: 0;
   border: 1px solid var(--border-color);
@@ -62,12 +63,12 @@
   &:hover {
     width: 32px;
     background-color: var(--outline-hover-bg);
-    transform: translateY(-50%) translateX(0);
+    transform: translateX(0);
   }
 }
 
 #vditor[data-editor-theme] .vditor-mobile-outline-trigger.vditor-mobile-outline-trigger--desktop.vditor-mobile-outline-trigger--active {
-  transform: translateY(-50%) translateX(0);
+  transform: translateX(0);
   width: 32px;
   color: var(--list-hover-color, var(--toolbar-icon-hover-color));
   border-color: color-mix(in srgb, var(--list-hover-color, var(--toolbar-icon-hover-color)) 40%, var(--border-color));
@@ -80,14 +81,14 @@
       display: none !important;
     }
 
-    .vditor-outline:not(.vditor-outline--mobile-open) {
-      display: none !important;
-    }
+    // 注意：移动端抽屉不要用 display: none 隐藏，display 不可 transition 会跳变。
+    // 完全靠 opacity + transform + pointer-events 控制可见性，让滑入动画可触发。
 
     .vditor-mobile-outline-trigger {
       display: inline-flex !important;
       position: absolute;
-      top: 4px;
+      // 与桌面态保持一致：固定在左上角，top 与桌面态对齐
+      top: 8px;
       left: 0;
       // translateX 改成 -10%，让按钮大部分留在视口内可点击
       transform: translateX(-10%);
@@ -131,15 +132,21 @@
     }
 
     .vditor-outline__backdrop {
-      display: none;
+      display: block;
       position: fixed;
       inset: 0;
       z-index: 199;
       background: color-mix(in srgb, #000 32%, transparent);
       backdrop-filter: blur(1px);
+      // 始终在 DOM 里，通过 opacity + pointer-events 控制显隐，
+      // 这样可以与抽屉滑入动画同步过渡，避免遮罩闪一下
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.22s ease;
 
       &--visible {
-        display: block;
+        opacity: 1;
+        pointer-events: auto;
       }
     }
 
@@ -156,9 +163,11 @@
       border: 1px solid color-mix(in srgb, var(--border-color) 80%, transparent);
       box-shadow: 0 8px 28px color-mix(in srgb, #000 14%, transparent);
       overflow: hidden;
-      transform: translateY(-6px) scale(0.98);
+      // 抽屉从左侧完全滑入视口再停留，translateX(-100%) = 自身宽度
+      // （min(68vw, 228px)）滑到屏幕左侧外
+      transform: translateX(calc(-100% - var(--mobile-outline-trigger-left)));
       opacity: 0;
-      transition: transform 0.18s ease, opacity 0.18s ease;
+      transition: transform 0.22s ease, opacity 0.18s ease;
       pointer-events: none;
 
       &--right {
@@ -167,7 +176,7 @@
       }
 
       &--mobile-open {
-        transform: translateY(0) scale(1);
+        transform: translateX(0);
         opacity: 1;
         pointer-events: auto;
       }

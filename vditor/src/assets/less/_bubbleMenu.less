@@ -66,6 +66,112 @@
     display: flex;
   }
 
+  // 顶部三段式：清除颜色（左）+ 拖拽抓手（中）+ close（右），布局参考 vditor-html-inline-popover。
+  // 不再单独有 pin 按钮——点击抓手或实际拖动面板都会自动进入 pin 模式；
+  // 锁定态用 palette 根上的 --pinned 类体现，让拖拽胶囊背景高亮。
+  &__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;  // clear 顶左、close 顶右、drag 自动居中
+    gap: 4px;
+    margin: -2px -2px 2px;
+  }
+
+  &__clear,
+  &__close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: none;
+    border-radius: 5px;
+    background: transparent;
+    color: var(--toolbar-icon-color, #586069);
+    cursor: pointer;
+    transition: background-color 0.12s ease, color 0.12s ease;
+
+    .vditor-bubble-palette__button-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      line-height: 1;
+
+      .codicon {
+        font-size: 14px;
+        line-height: 1;
+        pointer-events: none;
+      }
+    }
+
+    &:hover {
+      background: color-mix(in srgb, var(--toolbar-icon-color, #586069) 12%, transparent);
+    }
+  }
+
+  // 关闭按钮：扁平化复用 vditor-html-inline-popover__close 的视觉，红底白 icon、24×24
+  &__close {
+    width: 24px;
+    height: 24px;
+    background: #d95757;
+    color: #fff;
+    border-radius: 6px;
+    transition: background-color 0.12s ease;
+
+    .vditor-bubble-palette__button-icon .codicon {
+      font-size: 16px;
+    }
+
+    &:hover {
+      background: #b91c1c;
+    }
+
+    &:active {
+      background: #991b1b;
+    }
+  }
+
+  // 拖拽胶囊：扁平化 + 尺寸对齐 html 编辑器 popover 的 .vditor-html-inline-popover__header
+  // (height 15px / border-radius 12px / 50% 宽度)
+  &__drag {
+    flex: 0 0 50%;
+    height: 15px;
+    cursor: grab;
+    user-select: none;
+    touch-action: none;
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--toolbar-icon-color, #586069) 6%, transparent);
+    transition: background-color 0.12s ease;
+
+    &:hover {
+      background: color-mix(in srgb, var(--toolbar-icon-color, #586069) 12%, transparent);
+    }
+
+    &:active {
+      cursor: grabbing;
+    }
+  }
+
+  // 锁定态：拖动过 / 点过抓手后给面板加 --pinned 类，抓手高亮（蓝色调）作为"现在锁住了"的反馈
+  &__pinned &__drag {
+    background: color-mix(in srgb, var(--toolbar-icon-hover-color, #4285f4) 22%, transparent);
+
+    &:hover {
+      background: color-mix(in srgb, var(--toolbar-icon-hover-color, #4285f4) 30%, transparent);
+    }
+  }
+
+  // 锁定态给面板整体加一个微弱的蓝色外发光，提示"这是锁住的状态"
+  &__pinned {
+    border-color: color-mix(in srgb, var(--toolbar-icon-hover-color, #4285f4) 35%, transparent);
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--toolbar-icon-hover-color, #4285f4) 25%, transparent),
+      0 4px 16px color-mix(in srgb, #000 18%, transparent),
+      0 1px 4px color-mix(in srgb, #000 10%, transparent);
+  }
+
   &__row {
     display: flex;
     align-items: center;
@@ -91,21 +197,6 @@
     &:hover {
       transform: scale(1.15);
       box-shadow: 0 0 0 2px color-mix(in srgb, var(--toolbar-icon-hover-color, #4285f4) 40%, transparent);
-    }
-  }
-
-  &__clear {
-    align-self: flex-end;
-    padding: 4px 10px;
-    border: 1px solid color-mix(in srgb, var(--toolbar-icon-color, #586069) 20%, transparent);
-    border-radius: 5px;
-    background: transparent;
-    color: var(--toolbar-icon-color, #586069);
-    font-size: 12px;
-    cursor: pointer;
-
-    &:hover {
-      background: color-mix(in srgb, var(--toolbar-icon-color, #586069) 8%, transparent);
     }
   }
 }

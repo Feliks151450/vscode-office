@@ -70,15 +70,17 @@ const buildImageStepperHTML = (key: string, label: string, value: number, unit: 
         </div>
     </div>`;
 
-const buildLineHeightStepperHTML = (value: number) =>
-    `<div class="${SETTINGS_PANEL_CLASS}__stepper-row" data-lh-key>
-        <span class="${SETTINGS_PANEL_CLASS}__stepper-label">Line Height</span>
+const buildLineHeightStepperHTML = (value: number) => {
+    const i18n = window.VditorI18n;
+    return `<div class="${SETTINGS_PANEL_CLASS}__stepper-row" data-lh-key>
+        <span class="${SETTINGS_PANEL_CLASS}__stepper-label">${i18n.lineHeight ?? "Line Height"}</span>
         <div class="${SETTINGS_PANEL_CLASS}__stepper">
             <button type="button" class="${SETTINGS_PANEL_CLASS}__stepper-btn" data-lh-step="-0.1">−</button>
             <input type="text" class="${SETTINGS_PANEL_CLASS}__stepper-input" data-lh-value value="${value.toFixed(1)}">
             <button type="button" class="${SETTINGS_PANEL_CLASS}__stepper-btn" data-lh-step="0.1">+</button>
         </div>
     </div>`;
+};
 
 const buildDropdownHTML = (key: string, label: string, options: readonly { label: string; value: string }[], currentValue: string) => {
     const current = options.find(o => o.value === currentValue);
@@ -273,10 +275,6 @@ export const buildAIModelsHTML = () => {
 export const buildSettingsFooterHTML = () => {
     const i18n = window.VditorI18n;
     return `<div class="${SETTINGS_PANEL_CLASS}__footer">
-            <button type="button" class="${SETTINGS_PANEL_CLASS}__footer-btn ${SETTINGS_PANEL_CLASS}__footer-btn--edit" data-edit-settings title="${i18n.settingsEditFile ?? i18n.edit}">
-                <span class="codicon codicon-edit" aria-hidden="true"></span>
-                <span>${i18n.settingsEditFile ?? i18n.edit}</span>
-            </button>
             <button type="button" class="${SETTINGS_PANEL_CLASS}__footer-btn ${SETTINGS_PANEL_CLASS}__footer-btn--reset" data-reset-settings title="${i18n.settingsReset ?? 'Reset'}">
                 <span class="codicon codicon-discard" aria-hidden="true"></span>
                 <span>${i18n.settingsReset ?? 'Reset'}</span>
@@ -299,38 +297,38 @@ export const buildSettingsPanelHTML = (vditor: IVditor) => {
     const typewriterMode = getGlobalLocalStorageSetting<boolean>(TYPEWRITER_MODE_KEY, false) === true;
     return `<div class="${SETTINGS_PANEL_CLASS}">
         <div class="${SETTINGS_PANEL_CLASS}__section">
-            <div class="${SETTINGS_PANEL_CLASS}__title">Edit Mode</div>
+            <div class="${SETTINGS_PANEL_CLASS}__title">${i18n.editMode ?? "Edit Mode"}</div>
             ${buildEditModeSegmentedHTML(vditor.currentMode)}
         </div>
         <div class="${SETTINGS_PANEL_CLASS}__section">
-            <div class="${SETTINGS_PANEL_CLASS}__title">Font Size</div>
+            <div class="${SETTINGS_PANEL_CLASS}__title">${i18n.fontSize ?? "Font Size"}</div>
             <div class="${SETTINGS_PANEL_CLASS}__group">
-                ${buildFontSizeStepperHTML(UI_FONT_SIZE_KEY, "UI", uiSize)}
-                ${buildFontSizeStepperHTML(EDITOR_FONT_SIZE_KEY, "Editor", editorSize)}
+                ${buildFontSizeStepperHTML(UI_FONT_SIZE_KEY, i18n.fontSizeUI ?? "UI", uiSize)}
+                ${buildFontSizeStepperHTML(EDITOR_FONT_SIZE_KEY, i18n.fontSizeEditor ?? "Editor", editorSize)}
             </div>
         </div>
         <div class="${SETTINGS_PANEL_CLASS}__section">
-            <div class="${SETTINGS_PANEL_CLASS}__title">Typography</div>
+            <div class="${SETTINGS_PANEL_CLASS}__title">${i18n.typography ?? "Typography"}</div>
             <div class="${SETTINGS_PANEL_CLASS}__group">
-                ${buildDropdownHTML(FONT_FAMILY_KEY, "Font", FONT_FAMILY_OPTIONS, fontFamily)}
+                ${buildDropdownHTML(FONT_FAMILY_KEY, i18n.font ?? "Font", FONT_FAMILY_OPTIONS, fontFamily)}
                 ${buildDropdownHTML(BOLD_COLOR_KEY, i18n.boldColor ?? "Bold Color", getBoldColorOptions(), boldColor)}
-                ${buildDropdownHTML(PAGE_WIDTH_KEY, i18n.pageWidth, PAGE_WIDTH_OPTIONS, pageWidth)}
+                ${buildDropdownHTML(PAGE_WIDTH_KEY, i18n.pageWidth ?? "Page Width", PAGE_WIDTH_OPTIONS, pageWidth)}
                 ${buildLineHeightStepperHTML(lineHeight)}
                 ${buildToggleHTML(TYPEWRITER_MODE_KEY, i18n.typewriterMode ?? "Typewriter Mode", typewriterMode)}
             </div>
         </div>
         <div class="${SETTINGS_PANEL_CLASS}__section">
-            <div class="${SETTINGS_PANEL_CLASS}__title">CodeMirror</div>
+            <div class="${SETTINGS_PANEL_CLASS}__title">${i18n.codeMirror ?? "CodeMirror"}</div>
             <div class="${SETTINGS_PANEL_CLASS}__group">
-                ${buildDropdownHTML(CODE_FONT_FAMILY_KEY, "Font", getCodeFontFamilyOptions(), codeFontFamily)}
-                ${buildDropdownHTML(CODE_BLOCK_MAX_HEIGHT_KEY, i18n.codeBlockHeight, CODE_BLOCK_MAX_HEIGHT_OPTIONS, codeBlockMaxHeight)}
+                ${buildDropdownHTML(CODE_FONT_FAMILY_KEY, i18n.font ?? "Font", getCodeFontFamilyOptions(), codeFontFamily)}
+                ${buildDropdownHTML(CODE_BLOCK_MAX_HEIGHT_KEY, i18n.codeBlockHeight ?? "Code Block Height", CODE_BLOCK_MAX_HEIGHT_OPTIONS, codeBlockMaxHeight)}
             </div>
         </div>
         <div class="${SETTINGS_PANEL_CLASS}__section">
-            <div class="${SETTINGS_PANEL_CLASS}__title">${i18n.imageSize}</div>
+            <div class="${SETTINGS_PANEL_CLASS}__title">${i18n.imageSize ?? "Image Size"}</div>
             <div class="${SETTINGS_PANEL_CLASS}__group">
-                ${buildImageStepperHTML(IMAGE_MAX_WIDTH_KEY, i18n.imageMaxWidth, imgMaxWidth, "%")}
-                ${buildImageStepperHTML(IMAGE_MAX_HEIGHT_KEY, i18n.imageMaxHeight, imgMaxHeight, "vh")}
+                ${buildImageStepperHTML(IMAGE_MAX_WIDTH_KEY, i18n.imageMaxWidth ?? "Max Width", imgMaxWidth, "%")}
+                ${buildImageStepperHTML(IMAGE_MAX_HEIGHT_KEY, i18n.imageMaxHeight ?? "Max Height", imgMaxHeight, "vh")}
             </div>
         </div>
         ${buildSettingsFooterHTML()}

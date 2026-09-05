@@ -627,6 +627,12 @@ const finishDrag = (vditor: IVditor, state: IBlockHandleState) => {
     removeDragGhost(state);
     document.body.style.userSelect = "";
     document.body.style.cursor = "";
+    // iOS Safari 拖拽过程中会在 contenteditable 里留下选区，
+    // 这里清掉避免松手后还看得到高亮痕迹
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount > 0 && !sel.isCollapsed) {
+        sel.removeAllRanges();
+    }
 
     if (block && dropTarget) {
         block.classList.remove(SOURCE_DRAGGING_CLASS);

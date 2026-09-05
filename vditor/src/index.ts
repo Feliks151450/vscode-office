@@ -58,9 +58,12 @@ import {
     applyEditorSettings,
     enableViewerSettingsSync,
     exportViewerSettings,
+    getEditorSettings,
     getGlobalLocalStorageSetting,
     importViewerSettings,
+    setEditorSettings,
     setOnViewerSettingsChange,
+    EditorSettings,
     ViewerSettingsExport,
 } from "./ts/util/globalLocalStorageSettings";
 import { exportExportSettings, ExportThemeSettings } from "./ts/util/exportThemeSettings";
@@ -85,6 +88,20 @@ class Vditor {
     public static outlineRender = outlineRender;
     public static setCodeTheme = setCodeTheme;
     public static setEditorTheme = applyEditorTheme;
+    /** 编辑器设置默认值 */
+    public static DEFAULT_EDITOR_SETTINGS = {
+        uiFontSize: 13,
+        editorFontSize: 13,
+        lineHeight: 1.7,
+        fontFamily: "inherit",
+        codeFontFamily: "inherit",
+        boldColor: "default",
+        pageWidth: "100%",
+        codeBlockMaxHeight: "none",
+        imageMaxWidth: 100,
+        imageMaxHeight: 70,
+        typewriterMode: false,
+    } as const;
 
     public readonly version: string;
     public vditor: IVditor;
@@ -191,6 +208,28 @@ class Vditor {
     /** 获取编辑器当前编辑模式 */
     public getCurrentMode() {
         return this.vditor.currentMode;
+    }
+
+    /**
+     * 获取当前生效的编辑器设置快照（已合并默认值）。
+     * 包含 uiFontSize / editorFontSize / lineHeight / fontFamily / codeFontFamily
+     * / boldColor / pageWidth / codeBlockMaxHeight / imageMaxWidth / imageMaxHeight
+     * / typewriterMode。
+     */
+    public getEditorSettings(): EditorSettings {
+        return getEditorSettings();
+    }
+
+    /**
+     * 修改编辑器设置。会立即写入 localStorage 并把对应 CSS 变量应用到 #vditor 上。
+     * 若设置面板已打开，UI 会同步刷新；未传字段保持不变，传 undefined 表示清除该项（恢复默认）。
+     *
+     * 注意：本方法是程序化 API 调用，**不会**触发 onSettingsChange 回调。
+     * 回调仅对面板 UI 操作（+/-、下拉、Toggle、Reset）生效。
+     */
+    public setEditorSettings(partial: Partial<EditorSettings>) {
+        setEditorSettings(this.vditor.element, partial);
+        refreshSettingsToolbarPanel(this.vditor);
     }
 
     /** 聚焦到编辑器 */
@@ -601,7 +640,7 @@ class Vditor {
 
         addScript(
             mergedOptions._lutePath ||
-            `${mergedOptions.cdn}/dist/js/lute/lute.min.js`,
+            `lutePro.min.js`,
             "vditorLuteScript",
         ).then(() => {
             this.vditor.lute = setLute({

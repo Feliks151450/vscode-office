@@ -137,7 +137,9 @@ export const prepareEditorThemeMobileOutline = (vditor: IVditor) => {
         return;
     }
     vditor.outline.element.classList.remove("vditor-outline--mobile-open");
-    vditor.outline.element.style.display = "none";
+    // 注意：不要设 display: none —— display 不可 transition，会让后续
+    // syncMobileOutlinePanel(true) 触发的滑入动画直接跳过。抽屉的可见性
+    // 完全由 opacity + transform + pointer-events 在 CSS 里控制。
 };
 
 export const initMobileOutlineMenu = (vditor: IVditor) => {

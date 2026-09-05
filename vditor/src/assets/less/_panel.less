@@ -222,8 +222,10 @@
       --vditor-popover-secondary-btn-bg: color-mix(in srgb, var(--textarea-text-color) 10%, transparent);
       --vditor-popover-secondary-btn-bg-hover: color-mix(in srgb, var(--textarea-text-color) 16%, transparent);
       opacity: 1;
-      min-width: 260px;
-      max-width: min(480px, calc(100vw - 24px));
+      // 跟 .vditor-bubble-palette 实际渲染宽度（≈278px，对应 8 个 22px 色块 + 32px 标题 + padding 等）对齐
+      width: 278px;
+      max-width: 278px;
+      min-width: 278px;
       max-height: min(520px, calc(100vh - 24px));
       padding: 7px 7px;
       border: 1px solid color-mix(in srgb, var(--toolbar-icon-color) 22%, transparent);

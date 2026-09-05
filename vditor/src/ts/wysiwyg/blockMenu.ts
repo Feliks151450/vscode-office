@@ -2,7 +2,7 @@ import {setSelectionFocus} from "../util/selection";
 import {renderTocNow} from "../util/toc";
 import {afterRenderEvent} from "./afterRenderEvent";
 import {isCmCodeBlock, removeCmCodeBlock, renderCodeBlocks} from "../codeBlock/codeMirrorManager";
-import {listToggle} from "../util/fixBrowserBehavior";
+import {insertEmptyBlock, listToggle} from "../util/fixBrowserBehavior";
 import {setHeading, removeHeading} from "./setHeading";
 import {processHeading} from "../ir/process";
 import {codicon} from "../util/codicon";
@@ -26,7 +26,8 @@ type BlockAction =
     | "h1" | "h2" | "h3" | "h4" | "h5" | "h6"
     | "list" | "ordered-list" | "check"
     | "quote" | "code"
-    | "duplicate" | "delete";
+    | "insert-before" | "insert-after"
+    | "duplicate" | "copy" | "delete";
 
 interface IBlockMenuItem {
     type?: "divider" | "label";
@@ -37,6 +38,9 @@ interface IBlockMenuItem {
 }
 
 const BLOCK_MENU_ITEMS: IBlockMenuItem[] = [
+    { action: "insert-before", label: "在前插入", icon: "arrow-up" },
+    { action: "insert-after", label: "在后插入", icon: "arrow-down" },
+    { type: "divider" },
     { type: "label", text: "转为" },
     { action: "paragraph", label: "段落", icon: "paragraph" },
     { action: "h1", label: "标题 1", icon: "type-h1" },
@@ -52,8 +56,53 @@ const BLOCK_MENU_ITEMS: IBlockMenuItem[] = [
     { action: "code", label: "代码块", icon: "code" },
     { type: "divider" },
     { action: "duplicate", label: "复制块", icon: "copy" },
+    { action: "copy", label: "复制 Markdown", icon: "clippy" },
     { action: "delete", label: "删除块", icon: "trash" },
 ];
+
+/**
+ * 内置 BlockAction 集合，用于校验 window.BLOCK_MENU_ITEMS 的合法性。
+ * 仅支持覆盖/重排/重命名内置动作；新增动作需扩展 BlockAction + dispatchBlockAction。
+ */
+const BLOCK_MENU_ACTIONS: readonly string[] = [
+    "paragraph", "h1", "h2", "h3", "h4", "h5", "h6",
+    "list", "ordered-list", "check", "quote", "code",
+    "insert-before", "insert-after", "duplicate", "copy", "delete",
+];
+
+declare global {
+    interface Window {
+        /**
+         * 自定义块操作菜单项，覆盖内置 BLOCK_MENU_ITEMS。
+         * - 支持 divider / label / 内置 action 项，可调整顺序、文案、图标
+         * - 未设置（或为空数组）时使用内置默认项
+         * - 每次 show 时读取，因此支持动态改 window.BLOCK_MENU_ITEMS 后重开菜单生效
+         */
+        BLOCK_MENU_ITEMS?: IBlockMenuItem[];
+    }
+}
+
+/**
+ * 读取最新的块菜单项：window.BLOCK_MENU_ITEMS 未设置或非法时回退到内置。
+ * 过滤掉未知 action 的项并打印警告（仅 divier / label 项无需 action）。
+ */
+export const resolveBlockMenuItems = (): IBlockMenuItem[] => {
+    const custom = window.BLOCK_MENU_ITEMS;
+    if (!Array.isArray(custom) || custom.length === 0) {
+        return BLOCK_MENU_ITEMS;
+    }
+    return custom.filter((item) => {
+        if (item.type === "divider" || item.type === "label") {
+            return true;
+        }
+        const action = item.action;
+        if (typeof action !== "string" || !BLOCK_MENU_ACTIONS.includes(action)) {
+            console.warn("[blockMenu] ignored item with unknown action:", item);
+            return false;
+        }
+        return true;
+    });
+};
 
 const placeRangeInBlock = (block: HTMLElement, editorElement?: HTMLElement) => {
     const range = document.createRange();
@@ -102,6 +151,81 @@ const duplicateBlock = (vditor: IVditor, block: HTMLElement) => {
     const clone = block.cloneNode(true) as HTMLElement;
     block.parentElement?.insertBefore(clone, block.nextSibling);
     afterRenderEvent(vditor);
+};
+
+/**
+ * 把块的 HTML 转成 Markdown 后写入剪贴板。
+ * 优先走宿主注入的 window.copyToClipboard（用 nativeCopy:// URL scheme
+ * 让原生宿主接管，避免 WebView 沙箱里 clipboard API 不可用）；
+ * 未注入时再降级 navigator.clipboard.writeText → execCommand("copy")。
+ */
+const copyBlockAsMarkdown = async (vditor: IVditor, block: HTMLElement) => {
+    // 必须先预处理块 HTML，否则 Lute 在转 markdown 时会把渲染产物当内容读：
+    //   1) <code data-type="math-inline"> 内联公式源：HTML2Md 不认识 data-type="math-inline"，
+    //      会把 <code> 当 inline code 输出 `` `latex` ``（带反引号），且不会丢掉紧随其后的
+    //      <mjx-container> SVG 内容，于是 $asdf$ 被复制成 `` asdf`asdf `` 这种样子；
+    //   2) <code> 文本开头按约定带 ZWSP（防 CodeMirror 把整段当空段），不属于 markdown 输出；
+    //   3) code-block / math-block 的预览容器（vditor-wysiwyg__preview 里的 SVG）必须整段剥掉。
+    const clone = block.cloneNode(true) as HTMLElement;
+    // 块级预览（已渲染的 math/code 块）：整段移除，只保留源 code
+    clone.querySelectorAll(".vditor-wysiwyg__preview, .vditor-ir__preview").forEach((el) => el.remove());
+    // 行内公式的 CodeMirror 编辑实例化容器
+    clone.querySelectorAll(".vditor-math-inline__cm-host, .cm-editor, .vditor-cm-chrome, .vditor-editor-boundary").forEach((el) => el.remove());
+    // 行内公式 editing 态：清掉 class 让 <code> 重新可见（display:none）
+    clone.querySelectorAll(".vditor-math-inline--editing").forEach((el) => el.classList.remove("vditor-math-inline--editing"));
+    // 行内公式源 <code> 的 ZWSP 前缀是 Vditor 内部约定（防止 CodeMirror 把整段当成空文档），
+    // 不属于 markdown 内容；剥离后输出 $latex$ 才干净。
+    clone.querySelectorAll("code[data-type='math-inline']").forEach((el) => {
+        // Constants.ZWSP = "​"：行内公式源 codeEl 的开头约定塞一个 ZWSP，避免 CodeMirror
+        // 把整段当成空文档；不属于 markdown 输出，剥离后 VditorDOM2Md 才能输出干净的 $latex$。
+        el.textContent = (el.textContent || "").replaceAll("​", "");
+    });
+    const html = clone.outerHTML;
+    let markdown = "";
+    try {
+        // 走 VditorDOM2Md / VditorIRDOM2Md 而非 HTML2Md：前者认 data-type="math-inline"、
+        // data-type="math-block" 等 Vditor 专属属性，能把内联 / 行间公式正确转回 $...$ / ```math```。
+        // HTML2Md 是通用 HTML→MD，不感知这些 data-type，对 <code data-type="math-inline"> 退化成反引号。
+        markdown = vditor.currentMode === "ir"
+            ? (vditor.lute?.VditorIRDOM2Md(html) ?? "")
+            : (vditor.lute?.VditorDOM2Md(html) ?? "");
+    } catch (err) {
+        console.error("[blockMenu] VditorDOM2Md failed", err);
+    }
+    // 1) 宿主接管：vditorProFunc.js 注入的 nativeCopy:// 桥
+    const hostCopy = (window as Window & {
+        copyToClipboard?: (text: string) => void;
+    }).copyToClipboard;
+    if (typeof hostCopy === "function") {
+        try {
+            hostCopy(markdown);
+            vditor.tip.show("已复制", 1200);
+            return;
+        } catch (err) {
+            console.warn("[blockMenu] host copyToClipboard failed, fall back", err);
+        }
+    }
+    // 2) 浏览器 Clipboard API
+    if (navigator.clipboard?.writeText) {
+        try {
+            await navigator.clipboard.writeText(markdown);
+            vditor.tip.show("已复制", 1200);
+            return;
+        } catch {
+            // fall through to execCommand fallback
+        }
+    }
+    // 3) execCommand 兜底（WKWebView / 旧浏览器）
+    const textarea = document.createElement("textarea");
+    textarea.value = markdown;
+    textarea.style.position = "fixed";
+    textarea.style.opacity = "0";
+    textarea.style.pointerEvents = "none";
+    document.body.appendChild(textarea);
+    textarea.select();
+    const ok = document.execCommand("copy");
+    textarea.remove();
+    vditor.tip.show(ok ? "已复制" : "复制失败", 1500);
 };
 
 const deleteBlock = (vditor: IVditor, block: HTMLElement) => {
@@ -168,15 +292,31 @@ const dispatchBlockAction = (vditor: IVditor, block: HTMLElement, action: BlockA
         return;
     }
 
+    if (action === "copy") {
+        // 异步操作，内部已处理 clipboard 异常与降级，单独 fire-and-forget
+        copyBlockAsMarkdown(vditor, block);
+        return;
+    }
+
     if (action === "delete") {
         deleteBlock(vditor, block);
+        return;
+    }
+
+    if (action === "insert-before" || action === "insert-after") {
+        const position: InsertPosition = action === "insert-before" ? "beforebegin" : "afterend";
+        // 编辑器需要先获得焦点，setRangeByWbr 才能成功设置光标
+        if (editorElement && document.activeElement !== editorElement) {
+            editorElement.focus({ preventScroll: true });
+        }
+        insertEmptyBlock(vditor, position, block);
         return;
     }
 };
 
 const renderMenuItems = (menu: HTMLElement) => {
     menu.innerHTML = "";
-    for (const item of BLOCK_MENU_ITEMS) {
+    for (const item of resolveBlockMenuItems()) {
         if (item.type === "divider") {
             const div = document.createElement("div");
             div.className = `${BLOCK_MENU_CLASS}__divider`;

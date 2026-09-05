@@ -370,6 +370,138 @@ export const applyEditorSettings = (vditorElement: HTMLElement) => {
     applyTypewriterModeClass(vditorElement);
 };
 
+// ===== Public settings API =====
+
+export interface EditorSettings {
+    /** UI 字号（px），影响 hint / outline / 工具栏标签等 */
+    uiFontSize: number;
+    /** 编辑器正文字号（px），仅影响 WYSIWYG / IR 内容区 */
+    editorFontSize: number;
+    /** 行高（1.0–3.0） */
+    lineHeight: number;
+    /** 正文字体族，'inherit' 表示继承 */
+    fontFamily: string;
+    /** 代码块字体族，'inherit' 表示继承 */
+    codeFontFamily: string;
+    /** 加粗颜色：'default' / 'plain' / CSS color string */
+    boldColor: string;
+    /** 页面宽度：'100%' / '210mm' / '768px' 等 */
+    pageWidth: string;
+    /** 代码块最大高度：'none' / '300px' / '400px' / '600px' / '800px' */
+    codeBlockMaxHeight: string;
+    /** 图片最大宽度（百分比，10–100） */
+    imageMaxWidth: number;
+    /** 图片最大高度（vh，10–100） */
+    imageMaxHeight: number;
+    /** 打字机模式 */
+    typewriterMode: boolean;
+}
+
+export const DEFAULT_EDITOR_SETTINGS: EditorSettings = {
+    uiFontSize: UI_FONT_SIZE_DEFAULT,
+    editorFontSize: EDITOR_FONT_SIZE_DEFAULT,
+    lineHeight: LINE_HEIGHT_DEFAULT,
+    fontFamily: "inherit",
+    codeFontFamily: "inherit",
+    boldColor: BOLD_COLOR_DEFAULT_OPTION,
+    pageWidth: PAGE_WIDTH_DEFAULT,
+    codeBlockMaxHeight: CODE_BLOCK_MAX_HEIGHT_DEFAULT,
+    imageMaxWidth: IMAGE_MAX_WIDTH_DEFAULT,
+    imageMaxHeight: IMAGE_MAX_HEIGHT_DEFAULT,
+    typewriterMode: false,
+};
+
+const EDITOR_SETTING_KEY_MAP: Record<keyof EditorSettings, string> = {
+    uiFontSize: UI_FONT_SIZE_KEY,
+    editorFontSize: EDITOR_FONT_SIZE_KEY,
+    lineHeight: LINE_HEIGHT_KEY,
+    fontFamily: FONT_FAMILY_KEY,
+    codeFontFamily: CODE_FONT_FAMILY_KEY,
+    boldColor: BOLD_COLOR_KEY,
+    pageWidth: PAGE_WIDTH_KEY,
+    codeBlockMaxHeight: CODE_BLOCK_MAX_HEIGHT_KEY,
+    imageMaxWidth: IMAGE_MAX_WIDTH_KEY,
+    imageMaxHeight: IMAGE_MAX_HEIGHT_KEY,
+    typewriterMode: TYPEWRITER_MODE_KEY,
+};
+
+/** 读取当前生效的设置快照（已合并默认值） */
+export const getEditorSettings = (): EditorSettings => {
+    const result = { ...DEFAULT_EDITOR_SETTINGS };
+    for (const key of Object.keys(EDITOR_SETTING_KEY_MAP) as Array<keyof EditorSettings>) {
+        const storageKey = EDITOR_SETTING_KEY_MAP[key];
+        const stored = getGlobalLocalStorageSetting<EditorSettings[keyof EditorSettings]>(storageKey);
+        if (stored !== undefined) {
+            (result[key] as EditorSettings[keyof EditorSettings]) = stored;
+        }
+    }
+    return result;
+};
+
+/** 把单个 setting 写入 DOM。复用 applyXxx 系列，避免重复实现 CSS 副作用 */
+const applyEditorSettingToElement = (vditorElement: HTMLElement, key: keyof EditorSettings, value: EditorSettings[keyof EditorSettings]) => {
+    switch (key) {
+        case "uiFontSize":
+            vditorElement.style.setProperty("--ui-font-size", `${value}px`);
+            break;
+        case "editorFontSize":
+            vditorElement.style.setProperty("--editor-font-size", `${value}px`);
+            break;
+        case "lineHeight":
+            vditorElement.style.setProperty("--editor-line-height", String(value));
+            break;
+        case "fontFamily":
+            vditorElement.style.setProperty("--editor-font-family", String(value));
+            break;
+        case "codeFontFamily":
+            if (value === "inherit") {
+                vditorElement.style.removeProperty("--code-font-family");
+            } else {
+                vditorElement.style.setProperty("--code-font-family", String(value));
+            }
+            break;
+        case "boldColor":
+            applyBoldColorSetting(vditorElement, value as string);
+            break;
+        case "pageWidth":
+            applyPageWidthSetting(vditorElement, value as string);
+            break;
+        case "codeBlockMaxHeight":
+            if (value !== CODE_BLOCK_MAX_HEIGHT_DEFAULT) {
+                vditorElement.style.setProperty("--cm-block-max-height", String(value));
+            } else {
+                vditorElement.style.removeProperty("--cm-block-max-height");
+            }
+            break;
+        case "imageMaxWidth":
+            vditorElement.style.setProperty("--vditor-image-max-width", `${value}%`);
+            break;
+        case "imageMaxHeight":
+            vditorElement.style.setProperty("--vditor-image-max-height", `${value}vh`);
+            break;
+        case "typewriterMode":
+            applyTypewriterModeClass(vditorElement, value === true);
+            break;
+    }
+};
+
+/** 把部分 setting 写入存储并应用。传 undefined 会清除该 key（恢复默认）。
+ *  注意：本函数是程序化 API 调用，**不会**触发 onSettingsChange 回调。
+ *  UI 面板的修改（仍走 setGlobalLocalStorageSetting）会正常触发回调。 */
+export const setEditorSettings = (vditorElement: HTMLElement, partial: Partial<EditorSettings>) => {
+    suppressSettingsNotify = true;
+    try {
+        for (const key of Object.keys(partial) as Array<keyof EditorSettings>) {
+            const value = partial[key];
+            const storageKey = EDITOR_SETTING_KEY_MAP[key];
+            setGlobalLocalStorageSetting(storageKey, value as GlobalLocalStorageSettings[keyof GlobalLocalStorageSettings]);
+            applyEditorSettingToElement(vditorElement, key, value);
+        }
+    } finally {
+        suppressSettingsNotify = false;
+    }
+};
+
 export const applyTypewriterModeClass = (vditorElement: HTMLElement, enabled?: boolean) => {
     const on = enabled ?? getGlobalLocalStorageSetting<boolean>(TYPEWRITER_MODE_KEY, false) === true;
     vditorElement.classList.toggle("vditor--typewriter", on);

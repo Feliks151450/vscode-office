@@ -192,9 +192,12 @@ const replaceListItemWithEmptyBlock = (liElement: HTMLElement) => {
     dedupeAdjacentEmptyParagraphs(emptyBlockElement);
 };
 
-export const insertEmptyBlock = (vditor: IVditor, position: InsertPosition) => {
+export const insertEmptyBlock = (vditor: IVditor, position: InsertPosition, targetBlock?: HTMLElement) => {
     const range = getEditorRange(vditor);
-    const liElement = hasClosestByMatchTag(range.startContainer, "LI");
+    // targetBlock 用于块菜单等场景：菜单打开时光标可能已经离开原块，
+    // 这里用菜单捕获的块而不是当前 range 来定位插入点。
+    const anchor: Element | undefined = targetBlock || range.startContainer;
+    const liElement = hasClosestByMatchTag(anchor, "LI");
     if (liElement) {
         liElement.insertAdjacentHTML(position, buildEmptyListItemHTML(liElement));
         setRangeByWbr(vditor[vditor.currentMode].element, range);
@@ -203,7 +206,7 @@ export const insertEmptyBlock = (vditor: IVditor, position: InsertPosition) => {
         return;
     }
 
-    const blockElement = hasClosestBlock(range.startContainer);
+    const blockElement = hasClosestBlock(anchor);
     if (blockElement) {
         blockElement.insertAdjacentHTML(position, `<p data-block="0">${Constants.ZWSP}<wbr>\n</p>`);
         setRangeByWbr(vditor[vditor.currentMode].element, range);

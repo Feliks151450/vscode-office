@@ -131,8 +131,15 @@
 
     h1 {
       font-size: 1.75em;
-      padding-bottom: 0;
-      border-bottom: none;
+      // 一级标题下方加细横线作视觉分隔
+      padding-bottom: 0.4em;
+      border-bottom: 2px solid var(--hr-bg, color-mix(in srgb, var(--toolbar-icon-color) 20%, transparent));
+
+      // 深色模式：--hr-bg 在 Auto.css 里被设为 #141414 接近全黑，会跟背景融为一体看不见
+      // 改用 toolbar-icon-color（深色主题下偏浅）半透明，亮色背景下也保留 fallback
+      #vditor.vditor--dark & {
+        border-bottom-color: color-mix(in srgb, var(--toolbar-icon-color, #c9d1d9) 25%, transparent);
+      }
     }
 
     h2 {

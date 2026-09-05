@@ -1,0 +1,211 @@
+        * { box-sizing: border-box; }
+        html, body {
+            height: 100%;
+        }
+        body {
+            margin: 0;
+            background: linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+        #vditor {
+            height: 100%;
+        }
+
+        /* 右键菜单样式（与内置 contextMenu.ts 的类名匹配） */
+        .vditor-contextmenu {
+            position: fixed;
+            z-index: 99999;
+            min-width: 200px;
+            max-width: 280px;
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.06);
+            padding: 4px 0;
+            font-size: 13px;
+            line-height: 1.5;
+            color: #1f2937;
+            opacity: 0;
+            transform: scale(0.95);
+            pointer-events: none;
+            transition: opacity 0.12s ease, transform 0.12s ease;
+        }
+        .vditor-contextmenu--visible {
+            opacity: 1;
+            transform: scale(1);
+            pointer-events: auto;
+        }
+        .vditor-contextmenu__item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 6px 16px;
+            cursor: pointer;
+            transition: background 0.1s;
+            white-space: nowrap;
+        }
+        .vditor-contextmenu__item:hover {
+            background: #f3f4f6;
+        }
+        .vditor-contextmenu__item-icon {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 18px;
+            height: 18px;
+            flex-shrink: 0;
+            color: #6b7280;
+            font-size: 14px;
+        }
+        .vditor-contextmenu__item-label {
+            flex: 1;
+        }
+        .vditor-contextmenu__item-shortcut {
+            color: #9ca3af;
+            font-size: 12px;
+            margin-left: 16px;
+        }
+        .vditor-contextmenu__divider {
+            height: 1px;
+            background: #e5e7eb;
+            margin: 4px 0;
+        }
+        .vditor-contextmenu__group-label {
+            padding: 4px 16px 2px;
+            font-size: 11px;
+            color: #9ca3af;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        /* ===== LatexEasy 公式编辑器弹窗 ===== */
+        .latex-modal-mask {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.55);
+            backdrop-filter: blur(2px);
+            z-index: 9999;
+            display: none;
+            align-items: center;
+            justify-content: center;
+        }
+        .latex-modal-mask--open {
+            display: flex;
+        }
+        .latex-modal {
+            width: min(960px, 92vw);
+            height: min(720px, 86vh);
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 24px 60px rgba(0,0,0,0.35);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .latex-modal__header {
+            padding: 12px 18px;
+            border-bottom: 1px solid #e5e7eb;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 14px;
+            font-weight: 600;
+            color: #111827;
+        }
+        .latex-modal__header-hint {
+            font-weight: 400;
+            font-size: 12px;
+            color: #6b7280;
+        }
+        .latex-modal__body {
+            flex: 1;
+            min-height: 0;
+            position: relative;
+            background: #f8fafc;
+        }
+        .latex-modal__iframe {
+            width: 100%;
+            height: 100%;
+            border: 0;
+            display: block;
+        }
+        .latex-modal__footer {
+            padding: 12px 16px;
+            border-top: 1px solid #e5e7eb;
+            display: flex;
+            gap: 8px;
+            justify-content: flex-end;
+            align-items: center;
+            background: #fff;
+        }
+        .latex-modal__footer .latex-modal__spacer { flex: 1; }
+        .latex-modal__btn {
+            border: 1px solid #d1d5db;
+            background: #fff;
+            color: #111827;
+            font-size: 13px;
+            padding: 6px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.12s, border-color 0.12s;
+        }
+        .latex-modal__btn:hover { background: #f3f4f6; }
+        .latex-modal__btn--primary {
+            background: #2563eb;
+            border-color: #2563eb;
+            color: #fff;
+        }
+        .latex-modal__btn--primary:hover { background: #1d4ed8; }
+        .latex-modal__btn--code {
+            background: #0f766e;
+            border-color: #0f766e;
+            color: #fff;
+        }
+        .latex-modal__btn--code:hover { background: #115e59; }
+        .latex-modal__footer-hint {
+            font-size: 12px;
+            color: #6b7280;
+            margin-right: 8px;
+        }
+
+        /* ===== 弹窗深色模式（跟随编辑器的 vditor--dark）===== */
+        .latex-modal-mask--dark .latex-modal {
+            background: #1f2430;
+        }
+        .latex-modal-mask--dark .latex-modal__header {
+            background: #232a36;
+            border-bottom-color: #333c4c;
+            color: #e5e7eb;
+        }
+        .latex-modal-mask--dark .latex-modal__header-hint {
+            color: #9ca3af;
+        }
+        .latex-modal-mask--dark .latex-modal__body {
+            background: #2a313c;
+        }
+        .latex-modal-mask--dark .latex-modal__footer {
+            background: #232a36;
+            border-top-color: #333c4c;
+        }
+        .latex-modal-mask--dark .latex-modal__footer-hint {
+            color: #9ca3af;
+        }
+        .latex-modal-mask--dark .latex-modal__btn {
+            background: #2a313c;
+            border-color: #3d4554;
+            color: #e5e7eb;
+        }
+        .latex-modal-mask--dark .latex-modal__btn:hover {
+            background: #333c4c;
+        }
+        .latex-modal-mask--dark .latex-modal__btn--primary,
+        .latex-modal-mask--dark .latex-modal__btn--primary:hover {
+            background: #2563eb;
+            border-color: #2563eb;
+            color: #fff;
+        }
+        .latex-modal-mask--dark .latex-modal__btn--code,
+        .latex-modal-mask--dark .latex-modal__btn--code:hover {
+            background: #0f766e;
+            border-color: #0f766e;
+            color: #fff;
+        }

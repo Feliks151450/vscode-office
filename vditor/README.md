@@ -557,6 +557,14 @@ if (xhr.status === 200) {
 | enable | 初始化是否展现大纲 | false |
 | position | 大纲位置：'left', 'right' | 'left' |
 
+#### options.onSettingsChange
+
+设置变更回调，参数为当前全量快照（`ViewerSettingsExport`，含 `globalSettings` 与 `aiPreferences`）。**默认不触发**，必须配合 `vd.setViewerSettingsSyncEnabled(true)` 才生效。详见[监听设置变化](#监听设置变化)。
+
+```ts
+onSettingsChange?(settings: ViewerSettingsExport): void;
+```
+
 #### methods
 
 |   | 说明 |
@@ -592,6 +600,11 @@ if (xhr.status === 200) {
 | removeCommentIds(removeIds: string[]) | 删除评论 |
 | updateToolbarConfig(config: {hide?: boolean, pin?: boolean}) | 更新工具栏配置 |
 | insertEmptyBlock(position: InsertPosition) | 插入空快 |
+| getEditorSettings(): EditorSettings | 获取当前编辑器外观设置快照（已合并默认值）。详见[编辑器设置 API](#编辑器设置-api) |
+| setEditorSettings(partial: Partial\<EditorSettings>) | 修改编辑器外观设置。立即写入 localStorage 并应用 CSS 变量；传 `undefined` 表示清除该项恢复默认。**不会触发 `onSettingsChange` 回调** |
+| setViewerSettingsSyncEnabled(enabled: boolean) | 开启 / 关闭 `onSettingsChange` 回调通知（默认关闭）。详见[监听设置变化](#监听设置变化) |
+| exportViewerSettings(): ViewerSettingsExport | 导出当前全局设置快照（用于写入配置文件） |
+| importViewerSettings(data: ViewerSettingsExport) | 从配置文件导入并应用全局设置（导入过程会抑制回调） |
 
 #### static methods
 
@@ -658,6 +671,95 @@ options?: IPreviewOptions {
 | lazyLoadImageRender(element: (HTMLElement \| Document) = document) | 对启用懒加载的图片进行渲染 |
 | setCodeTheme(codeTheme: string, cdn = options.cdn) | 设置代码主题，codeTheme 参见 options.preview.hljs.style |
 | setContentTheme(contentTheme: string, path: string) | 设置内容主题，contentTheme 参见 options.preview.theme.list |
+| DEFAULT_EDITOR_SETTINGS | 编辑器外观设置默认值常量，见下 |
+
+### 编辑器设置 API
+
+这套 API 用于以编程方式读写设置面板里的所有项（UI 字号、正文字体、页面宽度、代码块最大高度、是否打字机模式等），绕开面板直接控制：
+
+```ts
+interface EditorSettings {
+    uiFontSize: number;          // UI 字号 (px)，影响 hint / outline / 工具栏标签
+    editorFontSize: number;      // 正文字号 (px)，仅影响 WYSIWYG / IR 内容区
+    lineHeight: number;          // 行高 (1.0–3.0)
+    fontFamily: string;          // 正文字体，'inherit' 表示继承
+    codeFontFamily: string;      // 代码字体
+    boldColor: string;           // 'default' / 'plain' / CSS 颜色
+    pageWidth: string;           // '100%' / '210mm' / '768px' 等
+    codeBlockMaxHeight: string;  // 'none' / '300px' / '400px' / '600px' / '800px'
+    imageMaxWidth: number;       // % (10–100)
+    imageMaxHeight: number;      // vh (10–100)
+    typewriterMode: boolean;
+}
+```
+
+```js
+const vd = new Vditor('vditor', {/* ... */});
+
+// 读取当前生效设置（已合并默认值，永远返回完整对象）
+const s = vd.getEditorSettings();
+console.log(s.pageWidth, s.lineHeight, s.typewriterMode);
+
+// 修改一项
+vd.setEditorSettings({ uiFontSize: 15 });
+
+// 批量修改
+vd.setEditorSettings({
+    pageWidth: '210mm',      // A4
+    lineHeight: 1.9,
+    typewriterMode: true,
+});
+
+// 恢复默认（传 undefined 清除该 key）
+vd.setEditorSettings({ typewriterMode: undefined });
+
+// 取默认值
+console.log(Vditor.DEFAULT_EDITOR_SETTINGS);
+```
+
+> `setEditorSettings()` 是"程序化配置"语义，**不会**触发 `onSettingsChange` 回调。如果你需要宿主感知这次写入，可以自己写：`vd.setEditorSettings({...}); vd.exportViewerSettings(); // 拿到新快照自己分发`。
+
+设置会立即生效：写入 `localStorage`（key 前缀 `vditor-global-settings`）→ 应用到 `#vditor` 的对应 CSS 变量 → 若设置面板已打开则 UI 同步刷新。未传字段保持不变；写过的字段会持久化，刷新页面后仍生效。
+
+> ⚠️ `setEditorSettings()` 是**程序化 API 调用**，**不会**触发 `onSettingsChange` 回调。`onSettingsChange` 只对**面板 UI 操作**（+/-、下拉、Toggle、Reset）生效。两者职责分离：API 写是"配置注入"语义，不应反向通知宿主；UI 操作是"用户意图"语义，需要持久化同步。
+
+#### 监听设置变化
+
+通过 `onSettingsChange` 选项挂回调，监听**面板 UI 操作**（+/-、下拉、Toggle、Reset）。注意**默认是关闭的**，必须显式调一次 `setViewerSettingsSyncEnabled(true)` 才会触发回调：`setEditorSettings()` 写入不触发本回调（见上方说明）：
+
+```js
+const vd = new Vditor('vditor', {
+  /* ... */
+  onSettingsChange: (settings) => {
+    // settings 是全量快照，需要自己 diff
+    syncToConfigFile(settings);
+  },
+});
+
+// 必须！否则回调不会触发
+vd.setViewerSettingsSyncEnabled(true);
+```
+
+回调收到的是 [`ViewerSettingsExport`](#static-methods) 格式（`{ globalSettings, aiPreferences }`），不是 diff：
+
+```js
+let prev = null;
+const vd = new Vditor('vditor', {
+  onSettingsChange: (cur) => {
+    if (prev) {
+      for (const k of Object.keys(cur.globalSettings)) {
+        if (cur.globalSettings[k] !== prev.globalSettings[k]) {
+          console.log('changed', k, '→', cur.globalSettings[k]);
+        }
+      }
+    }
+    prev = JSON.parse(JSON.stringify(cur));
+  },
+});
+vd.setViewerSettingsSyncEnabled(true);
+```
+
+批量导入场景下会自动抑制回调（避免导入自己触发回调），见 `importViewerSettings`。
 
 ## 🏗 开发文档
 

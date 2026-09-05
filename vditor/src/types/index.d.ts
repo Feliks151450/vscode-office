@@ -655,6 +655,7 @@ interface IVditor {
         resetMobileDrawer(vditor: IVditor): void,
         restoreDesktopState(vditor: IVditor): void,
         toggle(vditor: IVditor, show?: boolean): void,
+        hasContent(): boolean,
     };
     toolbar?: {
         elements?: { [key: string]: HTMLElement },

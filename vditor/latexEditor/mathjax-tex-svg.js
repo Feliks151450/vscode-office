@@ -29417,7 +29417,7 @@
                     style: {
                         "vertical-align": this.ex(-o)
                     },
-                    viewBox: [0, this.fixed(1e3 * -n, 1), this.fixed(1e3 * T, 1), this.fixed(1e3 * a, 1)].join(" ")
+                    viewBox: [0, this.fixed(1e3 * -n, 1), this.fixed(Math.max(.001, 1e3 * T), 1), this.fixed(Math.max(.001, 1e3 * a), 1)].join(" ")
                 }, [e]));
                 return .001 === T && (Q.setAttribute(a, "preserveAspectRatio", "xMidYMid slice"),
                 r < 0 && Q.setStyle(this.container, "margin-right", this.ex(r))),

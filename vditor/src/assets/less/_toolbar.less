@@ -2,7 +2,7 @@
   &-toolbar {
     background-color: var(--toolbar-background-color);
     border-bottom: var(--vditor-toolbar-border-bottom, 1px solid var(--border-color));
-    padding: 0 5px;
+    padding: 0 8px;
     line-height: 1;
     flex-wrap: wrap;
 
@@ -35,8 +35,8 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        width: 26px;
-        height: 26px;
+        width: 32px;
+        height: 32px;
         padding: 0;
         margin: 0;
         background-color: transparent;
@@ -47,7 +47,10 @@
         flex-shrink: 0;
         -webkit-appearance: none;
         appearance: none;
-        margin-top: calc((var(--toolbar-height) - 26px) / 2);
+        margin-top: calc((var(--toolbar-height) - 32px) / 2);
+        // 触发移动端 Safari 即时 click：取消双击放大延迟，并禁止 Safari
+        // 把单击解读成"开始文本选择手势"（contenteditable 上常见坑）。
+        touch-action: manipulation;
         transition:
           background-color 0.18s var(--vditor-popover-ease, cubic-bezier(0.25, 0.1, 0.25, 1)),
           color 0.18s var(--vditor-popover-ease, cubic-bezier(0.25, 0.1, 0.25, 1));
@@ -68,17 +71,17 @@
         display: inline-block;
         stroke-width: 0;
         stroke: currentColor;
-        width: 15px;
-        height: 15px;
+        width: 18px;
+        height: 18px;
       }
 
       .codicon {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: 16px;
-        height: 16px;
-        font-size: 16px;
+        width: 20px;
+        height: 20px;
+        font-size: 20px;
         line-height: 1;
         flex-shrink: 0;
       }
@@ -94,8 +97,8 @@
       input[type="file"] {
         user-select: none;
         position: absolute;
-        width: 26px;
-        height: 26px;
+        width: 32px;
+        height: 32px;
         top: 50%;
         left: 50%;
         transform: translate(-50%, -50%);
@@ -145,6 +148,7 @@
   justify-content: center;
   box-sizing: border-box;
   padding-left: 15px;
+  padding-right: 0px;
 }
 
 // @media screen and (max-width: @max-width) {
