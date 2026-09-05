@@ -506,6 +506,28 @@ class Vditor {
         this.aiDialog.open(sel || this.getValue(), !!sel);
     }
 
+    /** 打开设置面板。若已打开则 no-op；面板未渲染（toolbar 不含 settings 项）也无操作 */
+    public openSettings() {
+        const settingsItem = this.vditor.toolbar.elements.settings;
+        if (!settingsItem) { return; }
+        const panel = settingsItem.querySelector<HTMLElement>(".vditor-hint");
+        if (!panel || panel.style.display === "block") { return; }
+        (settingsItem.children[0] as HTMLElement).dispatchEvent(
+            new MouseEvent(getEventName(), { bubbles: true, cancelable: true }),
+        );
+    }
+
+    /** 关闭设置面板。若未打开则 no-op */
+    public closeSettings() {
+        const settingsItem = this.vditor.toolbar.elements.settings;
+        if (!settingsItem) { return; }
+        const panel = settingsItem.querySelector<HTMLElement>(".vditor-hint");
+        if (!panel || panel.style.display !== "block") { return; }
+        (settingsItem.children[0] as HTMLElement).dispatchEvent(
+            new MouseEvent(getEventName(), { bubbles: true, cancelable: true }),
+        );
+    }
+
     /** 触发 AI 润色。capturedMarkdown/isSelection 由调用方在失焦前预先捕获，避免选区丢失 */
     public triggerAIPolish(options?: IAIPolishOptions, capturedMarkdown?: string, isSelection?: boolean) {
         const onPolish = this.vditor.options.ai?.onPolish;

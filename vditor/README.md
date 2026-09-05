@@ -148,6 +148,87 @@ Vditor 在这些方面做了努力，希望能为现代化的通用 Markdown 编
 
 以上大部分特性可以通过开关配置是否启用，开发者可根据自己的应用场景选择搭配。
 
+## ⌨️ 快捷键
+
+> 源码中用 `⌘` 统一表示 **Mac = Cmd / Win·Linux = Ctrl**（由 `compatibility.isCtrl()` 解析）。下文同时列出两种写法。
+
+### 工具栏快捷键（基于默认 toolbar 配置）
+
+| Mac | Win / Linux | 功能 |
+| - | - | - |
+| ⌘B | Ctrl+B | 加粗 |
+| ⌘I | Ctrl+I | 斜体 |
+| ⌘D | Ctrl+D | 删除线 |
+| ⌘K | Ctrl+K | 插入链接 |
+| ⌘H | Ctrl+H | 标题 |
+| ⌘O | Ctrl+O | 有序列表 |
+| ⌘J | Ctrl+J | 任务列表 |
+| ⌘; | Ctrl+; | 引用 |
+| ⌘M | Ctrl+M | 插入表格 |
+| ⌘G | Ctrl+G | 行内代码 |
+| ⌘Z | Ctrl+Z | 撤销 |
+| ⌘Y | Ctrl+Y | 重做 |
+| ⇧⌘U | Ctrl+Shift+U | 代码块 |
+| ⇧⌘H | Ctrl+Shift+H | 分隔线 |
+| ⇧⌘I | Ctrl+Shift+I | 减少缩进 |
+| ⇧⌘O | Ctrl+Shift+O | 增加缩进 |
+| ⇧⌘B | Ctrl+Shift+B | 起始插入行 |
+| ⇧⌘E | Ctrl+Shift+E | 末尾插入行 |
+
+### 查找 / 替换
+
+| 快捷键 | 位置 | 功能 |
+| - | - | - |
+| ⌘F / Ctrl+F | 全局 | 打开查找（再按一次聚焦输入框） |
+| ⌘R / Ctrl+R | 全局 | 打开替换面板 |
+| Enter | 查找输入框 | 下一个匹配 |
+| Shift+Enter | 查找输入框 | 上一个匹配 |
+| Enter | 替换输入框 | 替换当前 |
+| Shift+Enter | 替换输入框 | 替换全部 |
+| Esc | 任一输入框 | 关闭查找面板 |
+
+### VS Code 风格编辑快捷键
+
+光标在 WYSIWYG / IR 编辑区且**不在 CodeMirror 代码块内**时生效，IME 组合输入时不生效：
+
+| 快捷键 | 功能 |
+| - | - |
+| Alt+↑ | 当前块上移 |
+| Alt+↓ | 当前块下移 |
+| Shift+Alt+↑ | 复制当前块到上方 |
+| Shift+Alt+↓ | 复制当前块到下方 |
+| ⌘L / Ctrl+L | 选中当前块 |
+| ⌘⇧K / Ctrl+Shift+K | 删除当前块 |
+| ⌘Enter / Ctrl+Enter | 在下方插入空块 |
+| ⌘⇧Enter / Ctrl+Shift+Enter | 在上方插入空块 |
+
+### 自动配对
+
+| 输入 | 自动补全 |
+| - | - |
+| `(` | `)` |
+| `[` | `]`（不影响 `{`） |
+
+### 对话框通用
+
+| 快捷键 | 场景 |
+| - | - |
+| Esc | 关闭公式弹窗 / AI 对话框 / AI 审阅面板 / 确认对话框 |
+| Enter | 确认对话框确认 |
+
+### 用户可配置 / 扩展
+
+* `options.ctrlEnter`：`⌘Enter` / `Ctrl+Enter` 在编辑器里触发用户回调（注意：会被上述 VS Code 风格的"插入空块"快捷键**优先**拦截）
+* 工具栏项的 `hotkey` 字段可被自定义 toolbar 配置覆盖，写法支持 `⌘X` / `⇧⌘X` / `⌥X` / `⌥⌘X` / `⇧Tab` / `Ctrl+Alt+Shift+Key`（`^` = Ctrl，`!` = Alt，`+` = Shift）
+
+### 边界条件（容易踩的坑）
+
+* **⌘F / ⌘R 是全局监听**，无视焦点、无视模式、无视 IME；宿主 app **不要再把这两个组合挂到自己的功能**上。⌘R 在浏览器默认是刷新页面，被 Vditor 拦下后宿主不再拿到该事件。
+* **VS Code 风格快捷键在 CodeMirror 代码块内不响应**（[vscodeShortcut.ts:170-172](vditor/src/ts/util/vscodeShortcut.ts#L170-L172) `isInsideCodeMirror` 守卫）。同理 [editorCommonEvent.ts:219-222](vditor/src/ts/util/editorCommonEvent.ts#L219-L222) 让整条 keydown 链在 CodeMirror 内直接 return。
+* **IME 组合输入中（`event.isComposing`）所有内置快捷键不响应**——VS Code 风格快捷键、Ctrl+Alt+1-6 切标题、toolbar hotkey 全部走 `isComposing` 守卫；宿主自己接 IME 也要照做。
+* **`Ctrl+Enter` 在 wysiwyg/ir 模式是"插入空块"（[vscodeShortcut.ts:227-232](vditor/src/ts/util/vscodeShortcut.ts#L227-L232)），在 preview 模式才是 `options.ctrlEnter` 回调**——同一组合键在不同模式下行为不同。
+* **Esc 在 IME 组合中也会触发 `options.esc()`**（[editorCommonEvent.ts:285](vditor/src/ts/util/editorCommonEvent.ts#L285) 不检查 isComposing）——若宿主的 ESC 用来"取消 IME 组字"，会被劫持。可以在自己的 esc 回调里 `if (event.isComposing) return;` 兜底。
+
 ## 🗃 案例
 
 * [Sym](https://github.com/88250/symphony) 一款用 Java 实现的现代化社区（论坛/BBS/社交网络/博客）平台
@@ -192,6 +273,44 @@ const vditor = new Vditor(id, {options...})
 * [CommonJS Render](https://github.com/Vanessa219/vditor/blob/master/demo/render.js)
 * [在Svelte中使用](https://github.com/HerbertHe/svelte-vditor-demo)
 
+#### 等待异步就绪（必读）
+
+`new Vditor()` 是**异步构造**：lute.js 需要动态加载、`initUI` 在加载完之后才执行。在 `after()` 回调触发之前，**`this.vditor` 是 `undefined`**，所以 `setValue / focus / getValue / openSettings / setEditorSettings` 等所有 API 调用都会抛 NPE。
+
+```js
+// ❌ 错误：在构造外立刻调 API
+const vd = new Vditor("vditor", { value: "..." });
+vd.setValue("new");          // TypeError: Cannot read properties of undefined
+vd.focus();                  // 同上
+
+// ✅ 正确：用 after() 等待 lute + initUI 完成
+new Vditor("vditor", {
+  value: "...",
+  after() {
+    this.setValue("new");    // this 在 after() 内指 Vditor 实例
+    this.focus();
+  },
+});
+
+// ✅ 或用 Promise 包装一层（便于 async/await 集成）
+function createVditor(options) {
+  return new Promise((resolve) => {
+    new Vditor(options.id, {
+      ...options,
+      after() {
+        options.after?.call(this);
+        resolve(this);
+      },
+    });
+  });
+}
+
+const vd = await createVditor({ id: "vditor", value: "..." });
+vd.setValue("new");
+```
+
+`options.after` 触发的时机（[index.ts:638-704](vditor/src/index.ts#L638-L704)）：lute.js 加载 → `initUI()` 跑完 → `setEditMode(...)` 执行 → DOM 全部就绪。**传入 `i18n` 对象 vs 传入 `lang` 字符串**时 `after()` 节奏不同（前者早一拍，因为 i18n 注入与 lute 加载并行；后者串行等待 i18n）。
+
 ### 主题
 
 #### 编辑器主题
@@ -219,6 +338,35 @@ Markdown 输出的 HTML 所展现的外观。内置 ant-design, light，dark，w
 * 编辑器初始化时可通过 `options.preview.hljs` 对代码块样式、行号、是否启用进行设置
 * 内容渲染初始化时可通过 `IPreviewOptions.hljs` 对代码块样式、行号、是否启用进行设置
 * 初始化完成后可通过 `setTheme` 或 `setCodeTheme` 更新代码主题
+
+#### 主题系统细节
+
+**编辑器主题（`setEditorTheme` / `data-editor-theme`）**
+
+* **10 个内置主题 ID** 分 3 组（来源 [editorThemeCatalog.ts:6-29](vditor/src/ts/ui/editorThemeCatalog.ts#L6-L29)）：
+  * Auto（1 个）：跟随系统 / VSCode
+  * Light（4 个）：Ant Design、Light、GitHub、Idea
+  * Dark（5 个）：Dark、One Dark、Monokai、Dracula、Nord
+* **CSS 全部打包进 `index.css`**，无外部主题 CSS 文件——主题 ID 只是切换 `data-editor-theme` 属性 + 注入对应的 scoped 样式块
+* **三套独立的 localStorage 持久化键**（[globalLocalStorageSettings.ts:60-62](vditor/src/ts/util/globalLocalStorageSettings.ts#L60-L62)）：
+  * `lastNonAutoEditorTheme`
+  * `lastLightEditorTheme`
+  * `lastDarkEditorTheme`
+
+  目的是：用户在 Light 选了 GitHub、切到 Dark 选了 One Dark，再切回 Light 时仍能恢复 GitHub。Auto 切换**不丢历史**。
+* **Auto 主题双轨监听**（[setEditorTheme.ts:75-132](vditor/src/ts/ui/setEditorTheme.ts#L75-L132)）：
+  1. VSCode 环境：监听 `document.body` 的 `data-vscode-theme-kind` MutationObserver
+  2. 浏览器环境：监听 `prefers-color-scheme` 的 matchMedia
+
+  两套监听器**全局只注册一次**（模块级静态变量），所有 vditor 实例共享——宿主不要在编辑器就绪前 toggle `data-vscode-theme-kind`，会触发整个编辑器 + Mermaid 重渲染。
+
+**内容主题（`setTheme` / `vditor--dark`）**
+
+`setTheme("dark")` 与编辑器主题**完全解耦**：它只切 `vditor.element` 上的 `vditor--dark` 类（[setTheme.ts:1-7](vditor/src/ts/ui/setTheme.ts#L1-L7)），对自定义 CSS 而言只是一个作用域 hook。要真正换编辑器外观用 `setEditorTheme(...)`。
+
+**API 通知断点**
+
+`setEditorTheme` 与 `setMermaidTheme` 公开方法固定 `notify=false`（[setEditorTheme.ts:177](vditor/src/ts/ui/setEditorTheme.ts#L177)）——监听 `options.changeEditorTheme` / `options.changeMermaidTheme` 想捕获外部 API 调用是**捕获不到的**，只能捕获工具栏 UI 操作。要么改用工具栏，要么自己在调用方手动通知。
 
 ### API
 
@@ -252,6 +400,12 @@ Markdown 输出的 HTML 所展现的外观。内置 ant-design, light，dark，w
 | typewriterMode | 是否启用打字机模式 | false |
 | cdn | 配置自建 CDN 地址 | `https://unpkg.com/vditor@${VDITOR_VERSION}` |
 | mode | 可选模式：sv, ir, wysiwyg | 'ir' |
+
+> ⚠️ **mode 的隐式行为**（[Options.ts:120-122](vditor/src/ts/util/Options.ts#L120-L122) + [initUI.ts:85-86](vditor/src/ts/ui/initUI.ts#L85-L86)）：
+>
+> * `"sv"`（旧 split-view）静默 alias → `"ir"`，**无任何 warning**；业务方拿到的 `vditor.currentMode` 是 `"ir"`
+> * 非法值（如 `"abc"`）静默回退到 `"wysiwyg"`
+> * 切模式会触发 8+ 个副作用（重新解析 Markdown、刷新大纲、清 undo 栈、`outline.toggle`），大文档下肉眼可见卡顿
 | debugger | 是否显示日志 | false |
 | value | 编辑器初始化值 | '' |
 | theme | 主题：classic, dark | 'classic' |
@@ -293,6 +447,13 @@ new Vditor('vditor', {
 | className | 样式名 | '' |
 | toolbar?: Array<options.toolbar> | 子菜单 | - |
 
+> ⚠️ **字符串 vs 对象合并是浅合并**（[Options.ts:133-301](vditor/src/ts/util/Options.ts#L133-L301)）：
+>
+> * `toolbar: ['bold']` → 继承默认（含 ⌘B、prefix/suffix、icon 等）
+> * `toolbar: [{ name: 'bold' }]` → `Object.assign({}, 默认, 自定义)`，**自定义字段覆盖默认字段**
+> * 只声明 `icon` 或 `hotkey` 会保留其它默认字段；**未声明的 `prefix` / `suffix` 会被默认完全保留**（不声明不等于"清空"）
+> * 覆盖 `hotkey = "F1"` 会丢掉原来的 ⌘B，等于删掉原热键；想"额外加"只能覆盖而不能叠加
+
 #### options.toolbarConfig
 
 |   | 说明 | 默认值 |
@@ -316,6 +477,19 @@ new Vditor('vditor', {
 | enable | 是否使用 localStorage 进行缓存 | true |
 | id | 缓存 key，第一个参数为元素且启用缓存时**必填** | - |
 | after(html: string): string | 缓存后的回调 | - |
+| focusHost | 焦点持久化模式：'browser'（默认）/ 'vscode' | 'browser' |
+
+> ⚠️ **cache 字段的隐式行为**（[Options.ts:120-128](vditor/src/ts/util/Options.ts#L120-L128)）：
+>
+> * `new Vditor('vditor')` 不传 options 时 → 自动注入 `{ cache: { id: "vditor" } }`
+> * `cache.id` 显式为空字符串也会被覆盖成 `"vditor"`
+> * **`cache.enable` 默认是 `true`**（与"未传 cache"是**不同**的状态）；但若只传 `cache: {}` 没有 id，`merge()` 会抛 `need options.cache.id`
+> * **未传 `cache` 字段**时 `vditor.upload` 实例不会被构造，所有 `cache.*` API 都不可用
+
+> ⚠️ **`cache.focusHost: 'vscode'` 会注册全局事件**（[cacheFocus.ts:469-480](vditor/src/ts/util/cacheFocus.ts#L469-L480)）：
+>
+> * `vscode` 模式自动挂 `pagehide / blur / focus` 三个 document 级监听，用于在 VSCode WebView 失焦时持久化光标位置
+> * `browser` 模式（默认）**不持久化光标**——宿主若需要持久化必须自己接管（或者构造时显式设 `focusHost: 'vscode'`）
 
 #### options.comment
 
@@ -328,6 +502,21 @@ new Vditor('vditor', {
 | remove(ids: string[]) | 删除评论回调 | - |
 | scroll(top: number) | 滚动回调 | - |
 | adjustTop(commentsData: ICommentsData[]) | 文档修改时，适配评论高度 | - |
+
+#### options.i18n
+
+|   | 说明 | 默认值 |
+| - | - | - |
+| lang | 语言：'en_US', 'ja_JP', 'ko_KR', 'ru_RU', 'zh_CN', 'zh_TW' | 'zh_CN' |
+| i18n | 自定义 i18n 对象（key-value 字符串对），传入后会挂到 `window.VditorI18n` | 内置 6 种 |
+
+> ⚠️ **i18n 的隐式行为**（[index.ts:139-159](vditor/src/index.ts#L139-L159)）：
+>
+> * **6 种内置 lang** 之外的 lang 值**直接抛错**（`lang not supported`）
+> * 传入 `i18n` 对象时直接挂 `window.VditorI18n`；不传时按 `lang` 异步注入 `<script id="vditorI18nScript">`——**两种用法下 `after()` 触发节奏不同**（前者早一拍，因为 i18n 注入与 lute 加载并行）
+> * 多实例共用 `vditorI18nScript` ID，有去重防护
+> * **大量 fallback 是英文默认值**：自定义 i18n 不填某个 key 时 UI 会显示英文（与项目里"显示 undefined"是两回事——Vditor 内部已对每个 key 设了英文兜底）
+> * emoji / at 等 hint 的 i18n 文案也走这一套
 
 #### options.preview
 
@@ -530,6 +719,8 @@ if (xhr.status === 200) {
 | fieldName | 上传字段名称 | 'file[]' |
 | renderLinkDest?(vditor: IVditor, node: ILuteNode, entering: boolean): [string, number] | 处理剪贴板中的图片地址 | '' |
 
+> ⚠️ **`url` 或 `handler` 二选一才会构造 `vditor.upload` 实例**（[index.ts:659-661](vditor/src/index.ts#L659-L661)）。如果只想要剪贴板图片拦截但没配 `url`/`handler`，`vditor.upload` 是 `undefined`；此时调用 `isUploading()` 会因读 `undefined.isUploading` 抛 `TypeError`。
+
 #### options.resize
 
 |   | 说明 | 默认值 |
@@ -605,8 +796,70 @@ onSettingsChange?(settings: ViewerSettingsExport): void;
 | setViewerSettingsSyncEnabled(enabled: boolean) | 开启 / 关闭 `onSettingsChange` 回调通知（默认关闭）。详见[监听设置变化](#监听设置变化) |
 | exportViewerSettings(): ViewerSettingsExport | 导出当前全局设置快照（用于写入配置文件） |
 | importViewerSettings(data: ViewerSettingsExport) | 从配置文件导入并应用全局设置（导入过程会抑制回调） |
+| openSettings() | 打开设置面板。若已打开或 toolbar 不含 settings 项则 no-op。详见[从外部打开弹窗](#从外部打开弹窗) |
+| closeSettings() | 关闭设置面板。若未打开则 no-op |
+| openAIPolishDialog() | 打开 AI 润色弹窗，传入当前选区或全文。详见[从外部打开弹窗](#从外部打开弹窗) |
+
+> ⚠️ **AI 相关方法依赖 `options.ai.onPolish`**（[index.ts:690-699](vditor/src/index.ts#L690-L699)）：不配置 `onPolish` 时 `aiDialog` 不会被实例化，下列方法全部**静默 no-op**，**无任何报错**：
+>
+> * `openAIPolishDialog()`
+> * `setCopilotAvailable(available)`
+> * `setVSCodeModels(models)`
+> * `triggerAIPolish(options?, capturedMarkdown?, isSelection?)`
+>
+> 业务方若 `ai: {}` 但忘了写 `onPolish`，整套 AI 接口失效且无法察觉。
+
+#### 方法实现细节
+
+下列方法的行为契约与表面对签名不完全一致，集成时容易踩坑：
+
+* **`getValue() / getHTML()`** — 每次都从**当前 mode 的 DOM** 经 `lute.VditorDOM2Md / VditorIRDOM2Md` 重新解析，**不走缓存**（[getMarkdown.ts:1-28](vditor/src/ts/markdown/getMarkdown.ts#L1-L28)）。高频轮询（如每 100ms）是大文档的性能瓶颈；`options.debugger = true` 会打 `[vditor markdown] getMarkdown` 日志。
+
+* **`setValue(markdown, clearStack = false)`** — 三重隐式行为（[index.ts:413-449](vditor/src/index.ts#L413-L449)）：
+  1. **不更新 dirty 状态**——既不调用 `fireContentInput` 也不调 `markSaved`，`isDirty()` 保持上一次值；如果之前 `markSaved` 过则仍为 false
+  2. **`clearStack = true`** 还会**重算** `historyMaxWaitFactor`（按新文档长度，>5 万字进入"仅 debounce 不强制 flush"档）
+  3. **`markdown === ""`（空字符串）会顺手 `clearCache()`**——删除 `cache.id` 对应的 localStorage 缓存（content / focus / scroll 三块）
+
+* **`setValue(_, false)`**（默认）—— **不**清 undo 栈、**也不**记新内容入栈；老历史能一路撤销回到 setValue 之前的内容。这是 vscode-office "载入新文档" 场景的常见坑：**必须传 `true`**。
+
+* **`insertValue(value, render = true)` vs `updateValue(value)`**：
+  * `insertValue` 走 `lute` 解析（markdown → DOM），是**渲染插入**
+  * `updateValue` 走 `document.execCommand("insertHTML", false, value)`——**仅插入字面 HTML**，不会解析 markdown；如果传 `# title` 给 `updateValue`，用户看到的是字面 `# title`
+
+* **`markSaved(markdown?) / isDirty()`** — 内部用 `WeakMap<IVditor, boolean>` 跟踪（[saveToolbarState.ts:5](vditor/src/ts/util/saveToolbarState.ts#L5)），**与 save 工具栏按钮完全解耦**。默认 toolbar **没有** `save` 项（[Options.ts](vditor/src/ts/util/Options.ts) 的默认 toolbar 不含它），所以视觉反馈"灰按钮"在默认配置下不可见——需要把 `{ name: 'save' }` 加到 `options.toolbar`。
+
+* **`clearStack()`** — 不只是清空，**还顺手 `addToUndoStack` 推入一个初始快照**（[index.ts:451-455](vditor/src/index.ts#L451-L455)）。`clearStack()` 后栈长度 = 1，且 `undo()` 守卫 `length < 2` 直接 return，所以**第一次 ⌘Z 直接被吞**。
+
+* **Undo / Redo 栈按 mode 分别存储**（[undo/index.ts:27-37](vditor/src/ts/undo/index.ts#L27-L37)）—— `ir` / `wysiwyg` 各一份独立栈；切模式后 ⌘Z **不会**撤销另一个 mode 的操作。这是用户"我刚才的操作 ⌘Z 撤销不掉"的根本原因。
+
+* **`focus() / blur()`** — 只对 `wysiwyg.element` / `ir.element` 主元素生效，**不**下钻到 CodeMirror（[index.ts:236-251](vditor/src/index.ts#L236-L251)）。光标在 CodeMirror 内时 `focus()` 不会切回去；需要自己 `view.contentDOM.blur()`。
+
+* **`getCursorPosition() / getSelection()`** — 同上，只读当前 mode 的 element。CodeMirror 内选中一段代码时 `getSelection()` 返回空字符串。
+
+* **`tip(text, time = 0)`** — `time = 0` 表示**一直显示**，不会超时关闭（与 `time > 0` 语义对立）。想"立即关闭"必须传 `1` 或正数。
+
+* **`destroy()`** — 内部**仅**解绑 `wysiwyg.unbindListener()`（[index.ts:628-636](vditor/src/index.ts#L628-L636)），IR / hint / outline / tip / toolbar / CodeMirror 实例的监听器**没有显式解绑**；全局 `matchMedia` 监听（[setEditorTheme.ts:97-132](vditor/src/ts/ui/setEditorTheme.ts#L97-L132)）使用模块级 `systemThemeVditor` 永远指向最后一个实例，**多实例 + SPA 路由切换时容易泄漏引用**。
+
+* **`clearCache()`** — 只清 `cache.id` 对应键（content / focus / scroll 三块），**不动** `vditor-global-settings` 与 AI preference localStorage key（[index.ts:317-326](vditor/src/index.ts#L317-L326)）。以为"清缓存"会重置全局配置的实际只清当前实例的文档状态。
+
+* **`switchEditMode(mode)`** — 切到相同 mode 早返回（[index.ts:185-191](vditor/src/index.ts#L185-L191)），且整条 `changeEditMode` 回调链被跳过（走 string 路径）；监听 `options.changeEditMode` 期望捕获 API 调用**捕获不到**，必须自己读 `getCurrentMode()`。
+
+* **`setEditorTheme / setMermaidTheme`** 公开方法固定 `notify = false`，**不会**触发 `options.changeEditorTheme` / `options.changeMermaidTheme`（[setEditorTheme.ts:177](vditor/src/ts/ui/setEditorTheme.ts#L177) / [index.ts:181-183](vditor/src/index.ts#L181-L183)）；这两个回调只对工具栏 UI 操作生效。
 
 #### static methods
+
+> ⚠️ **本 fork 实际存在的静态方法清单**（[index.ts:81-104](vditor/src/index.ts#L81-L104)）：
+>
+> ```
+> adapterRender, previewImage, codeRender, codeMirrorPreviewRender,
+> mathRender, mermaidRender, plantumlRender, outlineRender,
+> setCodeTheme, setEditorTheme,
+> DEFAULT_EDITOR_SETTINGS
+> ```
+>
+> **上游文档里的 `Vditor.preview` / `Vditor.md2html` / `Vditor.chartRender` / `Vditor.mindmapRender` 在本 fork 中不存在**——调用会 `TypeError: Vditor.xxx is not a function`。如需"无实例转换 markdown → html"，请使用 `setLute({...}).Md2HTML(md)` 自建。
+
+> ⚠️ **`Vditor.setCodeTheme` 写 `<html data-code-theme>` 是全局副作用**（[setCodeTheme.ts:37-38](vditor/src/ts/ui/setCodeTheme.ts#L37-L38)）—— 不止影响当前 vditor，还会污染页面其它 CodeMirror 实例。多编辑器 / 多视图场景下，主题切换彼此覆盖。
 
 * 不需要进行编辑操作时，仅需引入 [`method.min.js`](https://unpkg.com/vditor/dist/) 后如下直接调用
 
@@ -760,6 +1013,223 @@ vd.setViewerSettingsSyncEnabled(true);
 ```
 
 批量导入场景下会自动抑制回调（避免导入自己触发回调），见 `importViewerSettings`。
+
+### 从外部打开弹窗
+
+某些场景需要在编辑器外（右键菜单、命令面板、自定义快捷键、宿主菜单栏）主动打开 Vditor 的内置弹窗。Vditor 对这类调用方提供了 3 个公开方法，**已经处理了选区捕获、关其它弹层、面板定位等细节**，不需要再操作内部 DOM。
+
+| 方法 | 用途 |
+| - | - |
+| `openSettings()` | 打开设置面板（已开则 no-op；toolbar 不含 settings 项时也无操作） |
+| `closeSettings()` | 关闭设置面板（未开则 no-op） |
+| `openAIPolishDialog()` | 打开 AI 润色弹窗，传入当前选区或全文 |
+
+#### 在右键菜单里调用
+
+实现思路是：右键菜单的 click handler 拿到 `editor` 实例，按 `data-action` 分发对应调用。典型实现（来自 vscode-office 的 `resource/markdown/util.js`）：
+
+```js
+menu.addEventListener('click', e => {
+    const item = e.target.closest('[data-action]');
+    if (!item) return;
+    closeMenu();
+    const action = item.dataset.action;
+    switch (action) {
+        case 'aiPolish':
+            editor.openAIPolishDialog();      // 选中文本 → 润色选区；否则润色全文
+            break;
+        case 'openSettings':
+            editor.openSettings();            // 任意位置唤起设置面板
+            break;
+        case 'closeSettings':
+            editor.closeSettings();
+            break;
+    }
+});
+```
+
+#### 实现细节 / 调用注意
+
+1. **事件复用**：`openSettings()` / `closeSettings()` 内部是给 settings toolbar 按钮 `dispatchEvent` 一个 `MouseEvent`，让 `toggleSubMenu` 现有逻辑处理"关其它弹层 + 算位置"等副作用，**不会**绕过 UI 一致性检查
+2. **状态查询**：两个方法都先查 `panel.style.display === "block"`，所以重复调用或错序调用都是安全的（开对开 = no-op，关对关 = no-op）
+3. **选区处理**：`openAIPolishDialog()` 内部捕获选区（[index.ts:499-507](vditor/src/index.ts#L499-L507)）：
+   * 有选区 → 润色选区
+   * 无选区 → 润色全文
+   * 调用前**不要**自己 `blur()`，否则选区丢失后只能润色全文
+4. **不需要 toolbar settings 项也能调**：如果你的 toolbar 配置里**没有** `'settings'`，调 `openSettings()` 是 no-op，不报错
+5. **AI 对话框关闭**：AI 弹窗自己绑定 Esc 关闭（[aiDialog.ts:658-660](vditor/src/ts/ui/aiDialog.ts#L658-L660)），不需要外部调用关
+
+### 生命周期
+
+Vditor 实例的完整生命周期与状态机：
+
+```
+new Vditor(id, options)
+    │
+    ├─ 同步：构造 Vditor 包装类 + 合并 options
+    │
+    ├─ 异步 1：注入 i18n script（仅当未传 options.i18n）
+    │
+    ├─ 异步 2：注入 lute.js（与 i18n 并行）
+    │
+    ├─ lute 加载完成 → this.vditor = 内部实例（之前都是 undefined）
+    │
+    ├─ initUI() 跑完 → DOM / toolbar / outline / hint / CodeMirror 就绪
+    │
+    ├─ setEditMode(options.mode) → 当前模式编辑器渲染
+    │
+    └─ options.after() 触发 ← 唯一保证所有 API 可用的回调
+```
+
+**关键点**：
+
+* **`after()` 之前所有 API 都不可用**——任何 `setValue / focus / getValue / openSettings / setEditorSettings` 调用都会 NPE。详见 [示例代码 - 等待异步就绪](#等待异步就绪必读)。
+* `destroy()` 之后实例不可复用——`window.vditor` 引用需要宿主自己清掉。
+
+#### Dirty 状态机
+
+| 触发 | `isDirty()` 变化 | `options.input` 触发 | 备注 |
+| - | - | - | - |
+| 用户键入 / 粘贴 / IME 输入 | → `true` | ✅ | 走 `fireContentInput` |
+| `setValue(md, _)` | 不变 | ❌ | 既不 `markSaved` 也不标 dirty；监听 `options.input` 持久化会漏 |
+| `updateValue(value)` | → `true` | ✅ | 走浏览器原生 input event |
+| `insertValue(value, true)` | → `true` | ✅ | `preventInput=true` 但显式调 `input(vditor, range)` |
+| `markSaved(value?)` | → `false` | ❌ | 同时清掉 `vditor.options.input` 状态 |
+
+**与 save 工具栏按钮解耦**：`isDirty()` 状态由 WeakMap 跟踪，但视觉反馈（灰按钮）需要 toolbar 里存在 `{ name: 'save' }` 项。默认 toolbar 不含 save，**默认配置下看不见任何"已保存"反馈**。
+
+#### Undo / Redo 行为
+
+* **栈容量**：`stackSize = 50`（[undo/index.ts](vditor/src/ts/undo/index.ts)），超出后丢弃最旧
+* **按 mode 分别存储**：`ir` 与 `wysiwyg` 各一份独立栈，**切模式后 ⌘Z 不会撤销另一个 mode 的操作**
+* **`historyMaxWaitFactor` 按文档长度分级**（[historySchedule.ts:32-55](vditor/src/ts/util/historySchedule.ts#L32-L55)）：
+  * < 800 字：1× undoDelay（最快）
+  * 800 / 2500 / 6000 / 12000 / 20000 / 30000：1× ~ 5×
+  * ≥ 50000 字：返回 -1（仅 debounce，不强制 flush）
+* **`recordHistoryChange` 是 debounced**——连续输入时计时器不断被重置，**停笔才入栈**；宿主想"立刻落栈"得直接调 `vditor.undo.addToUndoStack(vditor)` 或 `recordHistoryChange(vditor)`
+* **`undoDelay` 默认值** 100ms
+
+#### 大纲渲染时机
+
+* **连续输入时**：`scheduleRenderToc`（[toc.ts:24-30](vditor/src/ts/util/toc.ts#L24-L30)）debounced 渲染——`setTimeout` 延迟 = `max(100, undoDelay)`，**停笔才刷新**
+* **立即刷新**（`renderTocNow`）：undo、redo、`setHeading`、删块、拖块、切模式、设置面板的设置变化
+* **active 项跳动抑制**：`markOutlineEditing(vditor)` 设置 `editingUntil = Date.now() + undoDelay + 50`（[updateOutlineActive.ts:107-109](vditor/src/ts/outline/updateOutlineActive.ts#L107-L109)），这段时间不更新 active 高亮，避免编辑过程中闪烁
+* **outline.toggle 故意不 focus 编辑器**（[outline/index.ts:225-233](vditor/src/ts/outline/index.ts#L225-L233)）—— 注释说 "focus 会清空滚动位置"
+
+### 选区与焦点
+
+Vditor 内部维护选区有多套机制，宿主接入时容易混淆：
+
+#### `savedRange`（宿主层模块变量）
+
+`vditorProFunc.js:8` 的 `let savedRange = null` 是**宿主层**的状态机：
+
+* `window.blur()` 时如果当前 range 在 `.vditor-wysiwyg` 内 → 写入 `savedRange`
+* `window.focus()` 时如果 `savedRange` 存在 → `removeAllRanges() + addRange(savedRange)`
+* 跨 iframe / shadow root 时失准（因为是 `window.getSelection()`）
+
+Vditor 公开 `focus / blur` **不返回任何 flag、不维护 savedRange**——宿主包装层必须自己做。
+
+#### 选区丢失的所有兜底链
+
+`vditor[mode].insert` 之前调 `getEditorRange`（[selection.ts:6-36](vditor/src/ts/selection.ts#L6-L36)）会依次尝试：
+
+1. `selection.getRangeAt(0)`（前提：range.startContainer 在编辑器内）
+2. `vditor[mode].range`（`blurEvent` 里存的兜底）
+3. 自动 `focus()` 到 0 位
+
+宿主如果在编辑器外 set selection，下一次 insert 会自动跳回编辑器。
+
+#### `frozenSelection`（AI 弹窗必备）
+
+AI 弹窗打开时会调用 `captureEditorSelection`（[frozenSelection.ts:72-102](vditor/src/ts/frozenSelection.ts#L72-L102)）冻结当前选区 + `showFrozenSelection` 高亮：
+
+* **优先用 CSS Highlight API**（浏览器支持 `CSS.highlights` 时），无 overlay div
+* **降级方案**：插入 `<div class="vditor-frozen-selection">` overlay
+* **仅 non-collapsed range 才存**——collapsed 状态时返回 `null`
+
+宿主实现"AI 弹窗打开后仍高亮原文"应该用这套 API，**不要**自己保存 `getSelection()`——点菜单会触发 blur，原生选区丢失。
+
+#### `setSelectionFocus` 会清掉多 range
+
+`setSelectionFocus(range)` = `selection.removeAllRanges() + addRange(range)`。**关键**：会清掉页面上其它选中态，宿主别指望同时多选。
+
+#### CodeMirror 内的特殊行为
+
+公开 `focus / blur / getCursorPosition / getSelection` 都**只对 wysiwyg / ir 主元素生效，不下钻到 CodeMirror**：
+
+* 光标在 CodeMirror 内调 `focus()` 不会切回 wysiwyg
+* 在 CodeMirror 里选中一段代码时 `getSelection()` 返回空字符串
+
+需要自己 `view.contentDOM.focus() / blur()`。
+
+### 渲染管线
+
+#### MathJax / KaTeX 加载差异
+
+| 引擎 | 加载方式 | 文件 | 同步性 |
+| - | - | - | - |
+| MathJax | `addScriptSync` | `tex-svg.js` / `tex-mml-chtml.js` | 同步 |
+| KaTeX | `addScript` | `katex.min.js` + `auto-render.min.js` | 异步 |
+
+切引擎必须配置 `options.preview.math.engine`。
+
+#### CodeMirror 接管边界
+
+* **仅 `data-type=code-block | math-block`** 被 CodeMirror 接管（[codeMirrorManager.ts](vditor/src/ts/codeBlock/codeMirrorManager.ts)），其它代码块（`mermaid` / `plantuml` / `chart` 等）走普通预览
+* **屏外懒加载**有 3 个常量：可视区 / 200px 缓冲 / 5000px 之外的代码块延迟挂载
+* **mermaid / plantuml 不入懒加载**——它们图大但解析本身异步
+
+#### math 源元素保护
+
+`isSourceMathElement()`（[mathRender.ts:58-70](vditor/src/ts/markdown/mathRender.ts#L58-L70)）判断"这是不是数学源码元素"，**防止源码被清空塞进 SVG**。宿主手动改 DOM 时不要破坏 `data-type="math-inline" | "math-block"` 父结构，否则渲染会跳过。
+
+#### Mermaid 主题
+
+5 个内置色板：`Ocean` / `Sunset` / `Dracula` / `Monokai` / `Nord`（[mermaid.less](vditor/src/assets/less/_mermaid.less)）；加上 4 个属性选择器驱动的：`Light` / `Forest` / `Dark` / `Auto`。
+
+#### PlantUML 硬编码公共服务器
+
+`http://www.plantuml.com/plantuml/svg/~1...`（[plantumlRender.ts](vditor/src/ts/markdown/plantumlRender.ts)）—— 企业内网无法访问外网时所有 plantuml 图全挂。
+
+### 宿主集成 / 自定义 URL 协议（vscode-office）
+
+本 fork 与宿主 App 通信**不走 postMessage**，而是 5 个**自定义 URL scheme**（用 `window.location.href = "scheme://..."` 触发）。宿主在 WKWebView / WebView 拦截 scheme 即可：
+
+| 协议 | 触发位置 | Payload | 宿主处理建议 |
+| - | - | - | - |
+| `editorimage://content=<base64>` | upload.handler 上传完成 | base64 dataURL | 上传到自己存储 + `vditor.insertValue("![image](url)")` 回写 |
+| `editordroptext://content?text=...&content=...` | 文本拖入编辑器 | URL 编码的拖入文本 + 当前编辑器全文 | `content=` 可选；只关心拖入文本可省略 |
+| `nativeCopy://content=<text>` | `copyToClipboard()` 或 block 菜单复制 | URL 编码的复制内容 | 写入系统剪贴板 |
+| `nativeCommand://save` | 工具栏 save 按钮 / `⌘S` | 无参数 | 触发宿主保存；**协议本身无去重 / 节流**，宿主侧应防抖 |
+| `editorexit://content=123` | `options.esc()` 回调 | 当前固定为 `123`（**未回传内容**） | 若要 ESC 退出带走文本须改 `esc` 配置 |
+
+**所有协议都通过 `window.location.href` 触发**，宿主在 WKWebView 拦截 `scheme:` URL 即可，不是 postMessage。详见 [vditorProFunc.js](vditor/vditorProFunc.js) 实现。
+
+### 集成陷阱速查
+
+按"踩坑代价 × 文档完整度"排序的 20 条最容易踩的坑：
+
+1. **`after()` 之前调任何 API 都会 NPE**（`this.vditor` 未赋值）。
+2. **`setValue(_, true)` 隐式三重行为**：空字符串**清 localStorage cache**、不更新 dirty、按新长度**重算** debounce 因子。
+3. **`switchEditMode` 切到相同 mode 早返回**，且**不触发** `changeEditMode`。
+4. **`setEditorTheme` / `setMermaidTheme` 公开方法固定 `notify=false`**，不会触发 `changeEditorTheme` / `changeMermaidTheme`。
+5. **`setEditorSettings({key: undefined})` 是清除字段**（恢复默认），**不是**"保留不变"。
+6. **`onSettingsChange` 默认关闭**，必须 `setViewerSettingsSyncEnabled(true)` 才会触发。
+7. **`setEditorSettings` / `importViewerSettings` 都抑制 `onSettingsChange`**（用 `suppressSettingsNotify` 包住）。
+8. **`Ctrl+F` / `Ctrl+R` 是全局拦截、无视焦点**；宿主别再挂这两个组合。
+9. **`Ctrl+Enter` 模式相关**：wysiwyg/ir 是"插入空行"，preview 是 `options.ctrlEnter`。
+10. **VS Code 风格快捷键在 CodeMirror 内 / IME 组字中不响应**。
+11. **Undo 栈按 mode 分存**——切模式后 ⌘Z 不会撤销另一个 mode 的操作。
+12. **`clearStack()` 顺手 push 一个初始快照**，第一次 ⌘Z 直接被吞。
+13. **`setValue` 不触发 `options.input`**；监听它来持久化会漏。
+14. **`markSaved / isDirty` 与 save 工具栏按钮解耦**——默认 toolbar 没有 save，视觉反馈不可见。
+15. **`cache.focusHost: 'vscode'` 会注册 `pagehide/blur/focus` 全局监听**；`'browser'` 不持久化光标。
+16. **`options.ai` 没 `onPolish`** → 所有 AI API 静默 no-op，无任何报错。
+17. **`destroy()` 不解绑 IR/hint/outline/tip 监听器** + 全局 `matchMedia` 泄漏引用 → 单页多实例注意。
+18. **`openSettings` / `closeSettings` 强依赖 toolbar 含 `settings` 项**；删掉后失效。
+19. **`setCodeTheme` 写 `<html data-code-theme>` 是全局副作用**，影响其它 CodeMirror 实例。
+20. **`options.toolbar` 用对象形式覆盖时只 shallow merge**，不声明的 `prefix` / `suffix` 不会被清，但只声明 `icon` / `hotkey` 会清掉其它默认。
 
 ## 🏗 开发文档
 
