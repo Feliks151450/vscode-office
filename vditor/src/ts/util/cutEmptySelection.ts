@@ -4,6 +4,7 @@ import { expandMarkerWithMathSync } from "../ir/expandMarkerSync";
 import { hasClosestByClassName } from "./hasClosest";
 import { recordHistoryChange, recordHistoryPosition } from "./instantHistory";
 import { getEditorRange, setRangeByWbr, setSelectionFocus } from "./selection";
+import { cleanFragmentForMarkdown } from "../markdown/cleanFragmentForMarkdown";
 
 const SKIP_CUT_DATA_TYPES = new Set([
     "code-block",
@@ -148,10 +149,16 @@ export const copyTextCutBlock = (event: ClipboardEvent, vditor: IVditor, blockEl
     event.stopPropagation();
     event.preventDefault();
 
-    const html = getTextCutBlockClipboardHTML(blockElement);
+    // n3: 整行剪切场景只关心"段落内容"——不需要 flush CodeMirror / math / YAML
+    // （这些都是剪切事件自身不太可能涉及的：整行剪切是文本节点层操作，
+    // 不会去碰 CM 内部状态）。改传 flushFrontMatter: false 避免关 YAML popover。
+    const blockHTML = getTextCutBlockClipboardHTML(blockElement);
+    const cleanContainer = document.createElement("div");
+    cleanContainer.innerHTML = blockHTML;
+    const cleanedHTML = cleanFragmentForMarkdown(vditor, cleanContainer);
     const text = vditor.currentMode === "ir" ?
-        vditor.lute.VditorIRDOM2Md(html).trim() :
-        vditor.lute.VditorDOM2Md(html).trim();
+        vditor.lute.VditorIRDOM2Md(cleanedHTML).trim() :
+        vditor.lute.VditorDOM2Md(cleanedHTML).trim();
     event.clipboardData.setData("text/plain", text);
     event.clipboardData.setData("text/html", "");
     return true;

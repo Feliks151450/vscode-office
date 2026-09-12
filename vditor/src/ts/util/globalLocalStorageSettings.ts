@@ -1,4 +1,10 @@
 import { accessLocalStorage } from "./compatibility";
+import { AIOutputLanguage } from "../ai/aiOutputLanguage";
+import { DEFAULT_AI_PRESETS } from "../ai/aiPresets";
+import type { AIPreset } from "../ai/aiPresets";
+
+// 重新导出 AIPreset，让 index.ts 等可以从一处导入所有 AI 公共类型
+export { AIPreset };
 
 const GLOBAL_SETTINGS_STORAGE_KEY = "vditor-global-settings";
 
@@ -326,6 +332,181 @@ export const getAIModels = (): AIModel[] => {
 
 export const setAIModels = (models: AIModel[]) => {
     setGlobalLocalStorageSetting(AI_MODELS_KEY, JSON.stringify(models));
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Presets (快捷操作)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const AI_PRESETS_KEY = "aiPresets";
+
+export const getAIPresets = (): AIPreset[] => {
+    const raw = getGlobalLocalStorageSetting<string>(AI_PRESETS_KEY, "");
+    if (!raw) return DEFAULT_AI_PRESETS;
+    try {
+        const parsed = JSON.parse(raw as string) as AIPreset[];
+        return parsed.length ? parsed : DEFAULT_AI_PRESETS;
+    } catch {
+        return DEFAULT_AI_PRESETS;
+    }
+};
+
+export const setAIPresets = (presets: AIPreset[]) => {
+    for (const p of presets) {
+        if (!p || typeof p.key !== "string" || !p.key
+            || typeof p.label !== "string"
+            || typeof p.goal !== "string" || !p.goal) {
+            throw new Error("setAIPresets: each preset must have non-empty key, label, goal");
+        }
+    }
+    setGlobalLocalStorageSetting(AI_PRESETS_KEY, JSON.stringify(presets));
+};
+
+/** 清空用户自定义预设，让下次 getAIPresets() 回退到内置默认 */
+export const resetAIPresets = () => {
+    setGlobalLocalStorageSetting(AI_PRESETS_KEY, undefined);
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Selections (当前选中项)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type AIEngine = "vscode" | "custom";
+
+export interface IAISelections {
+    engine: AIEngine;
+    /** AIPrompt.id；空串表示未选 */
+    selectedPrompt: string;
+    /** AIModel.id；空串表示未选 */
+    selectedModel: string;
+    outputLanguage: AIOutputLanguage;
+}
+
+const AI_SELECTION_DEFAULT: IAISelections = {
+    engine: "vscode",
+    selectedPrompt: "",
+    selectedModel: "",
+    outputLanguage: "auto",
+};
+
+const readAiPreferenceString = (key: string, fallback: string): string => {
+    if (!accessLocalStorage()) return fallback;
+    return localStorage.getItem(key) ?? fallback;
+};
+
+export const getAIEngine = (): AIEngine => {
+    const v = readAiPreferenceString(AI_ENGINE_KEY, AI_SELECTION_DEFAULT.engine);
+    return v === "custom" ? "custom" : "vscode";
+};
+
+export const setAIEngine = (engine: AIEngine) => {
+    setAiPreference(AI_ENGINE_KEY, engine);
+};
+
+export const getAISelectedPrompt = (): string => {
+    return readAiPreferenceString(AI_SELECTED_PROMPT_KEY, AI_SELECTION_DEFAULT.selectedPrompt);
+};
+
+export const setAISelectedPrompt = (id: string) => {
+    setAiPreference(AI_SELECTED_PROMPT_KEY, id);
+};
+
+export const getAISelectedModel = (): string => {
+    return readAiPreferenceString(AI_SELECTED_MODEL_KEY, AI_SELECTION_DEFAULT.selectedModel);
+};
+
+export const setAISelectedModel = (id: string) => {
+    setAiPreference(AI_SELECTED_MODEL_KEY, id);
+};
+
+export const getAIOutputLanguage = (): AIOutputLanguage => {
+    const v = readAiPreferenceString(AI_OUTPUT_LANGUAGE_KEY, AI_SELECTION_DEFAULT.outputLanguage);
+    // 仅接受已知值；其他回退到 "auto"
+    const known: AIOutputLanguage[] = ["auto", "en_US", "zh_CN", "zh_TW", "ja_JP", "ko_KR", "ru_RU"];
+    return (known as string[]).includes(v) ? (v as AIOutputLanguage) : "auto";
+};
+
+export const setAIOutputLanguage = (lang: AIOutputLanguage) => {
+    setAiPreference(AI_OUTPUT_LANGUAGE_KEY, lang);
+};
+
+export const getAISelections = (): IAISelections => ({
+    engine: getAIEngine(),
+    selectedPrompt: getAISelectedPrompt(),
+    selectedModel: getAISelectedModel(),
+    outputLanguage: getAIOutputLanguage(),
+});
+
+/**
+ * 批量更新选中项的子集。未提供的字段保持不变。
+ * 为避免对未变字段误触，本函数逐字段比较，仅对真实发生变化的字段写入。
+ *
+ * 注意：用 suppressSettingsNotify 包整段，try-finally 末尾统一调用一次
+ * notifyViewerSettingsChange()——保证外部 setAISelections({...4 fields}) 只触发
+ * 一次 onSettingsChange 通知（与 setAISettings 语义一致）。
+ */
+export const setAISelections = (partial: Partial<IAISelections>) => {
+    suppressSettingsNotify = true;
+    try {
+        if (partial.engine !== undefined && partial.engine !== getAIEngine()) {
+            setAIEngine(partial.engine);
+        }
+        if (partial.selectedPrompt !== undefined && partial.selectedPrompt !== getAISelectedPrompt()) {
+            setAISelectedPrompt(partial.selectedPrompt);
+        }
+        if (partial.selectedModel !== undefined && partial.selectedModel !== getAISelectedModel()) {
+            setAISelectedModel(partial.selectedModel);
+        }
+        if (partial.outputLanguage !== undefined && partial.outputLanguage !== getAIOutputLanguage()) {
+            setAIOutputLanguage(partial.outputLanguage);
+        }
+    } finally {
+        suppressSettingsNotify = false;
+    }
+    notifyViewerSettingsChange();
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 批量 AI 配置
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface IAISettings {
+    prompts: AIPrompt[];
+    models: AIModel[];
+    presets: AIPreset[];
+    selections: IAISelections;
+}
+
+export interface IAISettingsPatch {
+    prompts?: AIPrompt[];
+    models?: AIModel[];
+    presets?: AIPreset[];
+    selections?: Partial<IAISelections>;
+}
+
+export const getAISettings = (): IAISettings => ({
+    prompts: getAIPrompts(),
+    models: getAIModels(),
+    presets: getAIPresets(),
+    selections: getAISelections(),
+});
+
+/**
+ * 一次性应用 IAISettingsPatch。每个字段可选；未提供的字段保持不变。
+ * 选择使用 suppressSettingsNotify 抑制逐字段通知，仅在末尾统一触发一次
+ * onSettingsChange 回调——这样外部宿主一次 setAISettings 只会收到一次通知。
+ */
+export const setAISettings = (patch: IAISettingsPatch) => {
+    suppressSettingsNotify = true;
+    try {
+        if (patch.prompts !== undefined) setAIPrompts(patch.prompts);
+        if (patch.models !== undefined) setAIModels(patch.models);
+        if (patch.presets !== undefined) setAIPresets(patch.presets);
+        if (patch.selections !== undefined) setAISelections(patch.selections);
+    } finally {
+        suppressSettingsNotify = false;
+    }
+    notifyViewerSettingsChange();
 };
 
 export const applyPageWidthSetting = (vditorElement: HTMLElement, pageWidth?: string) => {

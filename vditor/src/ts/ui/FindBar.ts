@@ -18,6 +18,15 @@ const FIND_SKIP_SELECTOR = [
     ".vditor-find-bar",
     "[hidden]",
     "[aria-hidden='true']",
+    // M10 修复：去掉 universal "svg"——会误伤功能性 SVG（emoji 内联 svg、块菜单 svg 等）
+    // 只跳过容器级"渲染产物"节点
+    "mjx-container",          // MathJax 行内公式容器（含 svg）
+    ".vditor-wysiwyg__preview",
+    ".vditor-ir__preview",
+    ".vditor-html-inline__preview",
+    ".vditor-html-inline__render",
+    ".vditor-mermaid-chrome",
+    ".vditor-plantuml-chrome",
 ].join(", ");
 
 const c = (name: string) => `<span class="codicon codicon-${name}" aria-hidden="true"></span>`;
@@ -538,7 +547,13 @@ export class FindBar {
     }
 
     private applyCodeMirrorHighlights(root: HTMLElement, compiled: CompiledPattern) {
-        const blockElements = root.querySelectorAll<HTMLElement>("[data-type='code-block'], [data-type='math-block']");
+        // LOW-6：mermaid / plantuml / chart 等图表块虽然没 CodeMirror 实例化，但 search 应该读
+        // <code class="language-mermaid"> 里的源文本，而不是去 SVG 里搜字符
+        // M11 修复：精准选 code-block / math-block / mermaid / plantuml / chart 等
+        // 不要选所有 .vditor-wysiwyg__block（会重复搜正文 + 让 mermaid 块搜源而非渲染文本）
+        const blockElements = root.querySelectorAll<HTMLElement>(
+            "[data-type='code-block'], [data-type='math-block']",
+        );
         for (const blockElement of blockElements) {
             const view = getCodeMirrorView(blockElement);
             if (view) {
@@ -547,6 +562,9 @@ export class FindBar {
             const text = view?.state.doc.toString()
                 ?? blockElement.querySelector("pre code, code")?.textContent
                 ?? "";
+            if (!text) {
+                continue;
+            }
             const regex = new RegExp(compiled.global.source, compiled.global.flags);
             let match: RegExpExecArray | null;
             while ((match = regex.exec(text)) !== null) {
@@ -615,6 +633,7 @@ export class FindBar {
 
         const views = new Set<EditorView>();
         this.getContentEl()?.querySelectorAll<HTMLElement>("[data-type='code-block'], [data-type='math-block']").forEach((blockElement) => {
+            // LOW-6：同上，mermaid/plantuml 块也走 CM（如果有视图）
             const view = getCodeMirrorView(blockElement);
             if (view) {
                 views.add(view);

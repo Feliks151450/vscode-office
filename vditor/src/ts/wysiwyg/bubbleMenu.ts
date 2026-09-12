@@ -1,6 +1,7 @@
 import {codicon} from "../util/codicon";
 import {hasClosestByMatchTag} from "../util/hasClosest";
 import {getEditorRange, selectIsEditor, setSelectionFocus} from "../util/selection";
+import {rangeToMarkdown} from "../markdown/cleanFragmentForMarkdown";
 import {genAPopover, highlightToolbarWYSIWYG} from "./highlightToolbarWYSIWYG";
 import {getModePopover} from "../codeBlock/codeBlockLanguagePopover";
 import {afterRenderEvent} from "./afterRenderEvent";
@@ -19,6 +20,8 @@ interface IBubbleMenuState {
     hideTimer: number | null;
     editorElement: HTMLElement;
     isSelecting: boolean;
+    /** AI 润色是否可用（受 setBubbleMenuAIAvailable 控制），false 时不渲染 AI 按钮 */
+    aiAvailable: boolean;
 }
 
 interface IBubblePaletteState {
@@ -44,6 +47,10 @@ const FORMAT_ITEMS = [
     { name: "code", icon: "code" },
     { name: "link", icon: "link" },
     { name: "html-inline", icon: "symbol-structure" },
+    // AI 润色按钮：仅在 aiAvailable=true 时渲染（见 setBubbleMenuAIAvailable）
+    { name: "ai-polish", icon: "sparkle", conditional: true },
+    // AI 浮动输入面板：不依赖 Copilot，始终显示
+    { name: "ai-input", icon: "comment-discussion" },
 ];
 
 /**
@@ -226,54 +233,84 @@ const insertMark = (vditor: IVditor) => {
     afterRenderEvent(vditor);
 };
 
-const createBubbleMenuElement = (vditor: IVditor): HTMLElement => {
+const buildBubbleMenuButton = (vditor: IVditor, item: typeof FORMAT_ITEMS[number]): HTMLButtonElement => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = `${BUBBLE_MENU_CLASS}__btn`;
+    // aria-label 走 i18n（fallback 到 item.name）；ai-polish 这种 key 需要小驼峰映射
+    const i18n = (window as Window & { VditorI18n?: Record<string, string> }).VditorI18n;
+    const i18nKey = item.name.replace(/-([a-z])/g, (_, c) => c.toUpperCase()); // "ai-polish" → "aiPolish"
+    const label = i18n?.[i18nKey] ?? item.name;
+    btn.setAttribute("aria-label", label);
+    btn.setAttribute("data-type", item.name);
+    btn.innerHTML = codicon(item.icon);
+    btn.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (item.name === "link") {
+            insertLink(vditor);
+            hideBubbleMenu(vditor);
+        } else if (item.name === "copy") {
+            // MED-1：用 rangeToMarkdown 取结构化 markdown（保留 html-inline / 行内 math / color span）
+            // 而不是 selection.toString() 的纯文本
+            const md = rangeToMarkdown(vditor, getEditorRange(vditor));
+            if (md) {
+                navigator.clipboard.writeText(md);
+            }
+            hideBubbleMenu(vditor);
+        } else if (item.name === "highlight") {
+            insertMark(vditor);
+            hideBubbleMenu(vditor);
+        } else if (item.name === "html-inline") {
+            // 包选中文本为 html-inline shell，立即打开弹窗编辑
+            // 折叠选区时函数返回 false，气泡菜单照常隐藏即可
+            // iOS 端先把选区清掉再恢复以消除自带选中文本菜单；
+            // 包 shell、隐藏气泡菜单这些用选区的操作都得在恢复后再做
+            bypassIosSelectionMenu(() => {
+                wrapSelectionWithHtmlInline(vditor);
+                hideBubbleMenu(vditor);
+            });
+        } else if (item.name === "text-color") {
+            // iOS 端：点击颜色按钮时先移除选区再恢复，能消除 iOS 自带的选中文本菜单
+            //（复制 / 查词等）——调色板本身展示不依赖选区，色块点击时会再读最新选区
+            bypassIosSelectionMenu();
+            showColorPalette(vditor, btn);
+            // 气泡菜单保持显示，等待调色板操作
+        } else if (item.name === "ai-polish") {
+            // AI 润色：调 openAIPolishDialog() 打开 AI 弹窗，选区作为初始输入，
+            // 用户在弹窗里选提示词 + 引擎 + 目标后点润色开始流式。
+            // 与工具栏 AI 按钮、块菜单 AI 入口行为一致。
+            hideBubbleMenu(vditor);
+            const publicVd = (window as Window & { vditor?: { openAIPolishDialog(): void } }).vditor;
+            publicVd?.openAIPolishDialog?.();
+        } else if (item.name === "ai-input") {
+            // AI 浮动输入面板：锚点为当前选区 Range，面板出现在选区下方
+            hideBubbleMenu(vditor);
+            const sel = window.getSelection();
+            if (sel && sel.rangeCount > 0 && !sel.isCollapsed) {
+                const range = sel.getRangeAt(0).cloneRange();
+                const publicVd = (window as Window & {
+                    vditor?: { openAIInputPanel(target: HTMLElement | Range): void };
+                }).vditor;
+                publicVd?.openAIInputPanel?.(range);
+            }
+        } else {
+            clickToolbarButton(vditor, item.name);
+            hideBubbleMenu(vditor);
+        }
+    });
+    return btn;
+};
+
+const createBubbleMenuElement = (vditor: IVditor, aiAvailable: boolean): HTMLElement => {
     const menu = document.createElement("div");
     menu.className = BUBBLE_MENU_CLASS;
 
-    FORMAT_ITEMS.forEach(item => {
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.className = `${BUBBLE_MENU_CLASS}__btn`;
-        btn.setAttribute("aria-label", item.name);
-        btn.setAttribute("data-type", item.name);
-        btn.innerHTML = codicon(item.icon);
-        btn.addEventListener("mousedown", (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            if (item.name === "link") {
-                insertLink(vditor);
-                hideBubbleMenu(vditor);
-            } else if (item.name === "copy") {
-                const selection = window.getSelection();
-                if (selection) {
-                    navigator.clipboard.writeText(selection.toString());
-                }
-                hideBubbleMenu(vditor);
-            } else if (item.name === "highlight") {
-                insertMark(vditor);
-                hideBubbleMenu(vditor);
-            } else if (item.name === "html-inline") {
-                // 包选中文本为 html-inline shell，立即打开弹窗编辑
-                // 折叠选区时函数返回 false，气泡菜单照常隐藏即可
-                // iOS 端先把选区清掉再恢复以消除自带选中文本菜单；
-                // 包 shell、隐藏气泡菜单这些用选区的操作都得在恢复后再做
-                bypassIosSelectionMenu(() => {
-                    wrapSelectionWithHtmlInline(vditor);
-                    hideBubbleMenu(vditor);
-                });
-            } else if (item.name === "text-color") {
-                // iOS 端：点击颜色按钮时先移除选区再恢复，能消除 iOS 自带的选中文本菜单
-                //（复制 / 查词等）——调色板本身展示不依赖选区，色块点击时会再读最新选区
-                bypassIosSelectionMenu();
-                showColorPalette(vditor, btn);
-                // 气泡菜单保持显示，等待调色板操作
-            } else {
-                clickToolbarButton(vditor, item.name);
-                hideBubbleMenu(vditor);
-            }
-        });
-        menu.appendChild(btn);
-    });
+    // 一次性创建按钮；conditional=true 的项按 aiAvailable 动态控制（见 setBubbleMenuAIAvailable）
+    for (const item of FORMAT_ITEMS) {
+        if (item.conditional && !aiAvailable) continue;
+        menu.appendChild(buildBubbleMenuButton(vditor, item));
+    }
 
     // 不挂到 body：initUI 会重置 vditor.element.innerHTML，且 body 下继承不到
     // vditor 根元素上的主题变量（--panel-background-color 等），深色模式会失效。
@@ -693,7 +730,8 @@ export const initBubbleMenu = (vditor: IVditor, editorElement: HTMLElement) => {
         return;
     }
 
-    const element = createBubbleMenuElement(vditor);
+    // AI 按钮默认隐藏；外部（setBubbleMenuAIAvailable / setCopilotAvailable）打开后才显示
+    const element = createBubbleMenuElement(vditor, false);
 
     const state: IBubbleMenuState = {
         element,
@@ -701,6 +739,7 @@ export const initBubbleMenu = (vditor: IVditor, editorElement: HTMLElement) => {
         hideTimer: null,
         editorElement,
         isSelecting: false,
+        aiAvailable: false,
     };
     menuMap.set(vditor, state);
 
@@ -781,4 +820,40 @@ export const destroyBubbleMenu = (vditor: IVditor) => {
         paletteState.element.remove();
         paletteMap.delete(vditor);
     }
+};
+
+/**
+ * 切换气泡菜单 AI 按钮的显示。true 时插入 sparkle 按钮；false 时移除。
+ * 通常由 vditorProFunc.js 在收到 vd.setCopilotAvailable(true) 时同步调用，
+ * 也可独立调用（例如想隐藏 AI 按钮但保留 AIDialog 实例）。
+ * 幂等：重复设相同值是 no-op。
+ */
+export const setBubbleMenuAIAvailable = (vditor: IVditor, available: boolean) => {
+    const state = menuMap.get(vditor);
+    if (!state) return;
+    if (state.aiAvailable === available) return;
+
+    const existing = state.element.querySelector(
+        `button.${BUBBLE_MENU_CLASS}__btn[data-type="ai-polish"]`,
+    );
+
+    if (available) {
+        if (existing) return;
+        const aiItem = FORMAT_ITEMS.find(i => i.name === "ai-polish");
+        if (!aiItem) return;
+        // 插在调色板按钮（text-color）和链接之间，保持视觉分组：纯格式 → AI → 链接
+        const anchor = state.element.querySelector(
+            `button.${BUBBLE_MENU_CLASS}__btn[data-type="link"]`,
+        );
+        const btn = buildBubbleMenuButton(vditor, aiItem);
+        if (anchor) {
+            state.element.insertBefore(btn, anchor);
+        } else {
+            state.element.appendChild(btn);
+        }
+    } else {
+        if (existing) existing.remove();
+    }
+
+    state.aiAvailable = available;
 };

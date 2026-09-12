@@ -93,6 +93,11 @@ export class AIReviewPanel {
     }
 
     public stream(chunk: string) {
+        // MED-8 / LOW-9 安全网：面板已 close 后再调 stream 应静默丢弃 + 警告
+        if (this.root === null) {
+            console.warn("[ai] streamAIChunk called after panel closed, ignoring chunk");
+            return;
+        }
         if (!this.streaming) {
             return;
         }
@@ -108,6 +113,11 @@ export class AIReviewPanel {
     }
 
     public endStream() {
+        // MED-8 / LOW-9：endStream 在 close 之后是 no-op
+        if (this.root === null) {
+            console.warn("[ai] endAIStream called after panel closed, ignoring");
+            return;
+        }
         this.streaming = false;
         if (this.streamTimer !== null) {
             window.clearTimeout(this.streamTimer);
@@ -132,6 +142,8 @@ export class AIReviewPanel {
         this.resultEl = null;
         this.callbacks = null;
         this.streaming = false;
+        // n11 修复：close() 清 streamBuffer——下次 open() 不会显示上次的残留文本
+        this.streamBuffer = "";
     }
 
     private bindEvents() {

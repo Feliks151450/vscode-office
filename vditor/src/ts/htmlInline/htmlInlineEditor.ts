@@ -22,6 +22,7 @@ import { telemetry } from "../util/telemetry";
 import { resolveTextColors, resolveBgColors } from "../util/colorPalette";
 import {
     decodeHtmlInlineSource,
+    escapeAttr,
     MD_SOURCE_ESC_NEWLINE,
     renderHtmlInlineShell,
 } from "./htmlInlineShell";
@@ -496,6 +497,35 @@ const visualHostToMarkdown = (host: HTMLElement): string => {
     return walk(host).trim();
 };
 
+/**
+ * MED-3 修复：把 html-inline shell 内 visualHost 的"当前完整结构"重新写回 data-md-source。
+ *
+ * 背景：用户在 shell 内的某些字符上加颜色 → 产生嵌套 <span style="...">。
+ * 外层 shell 的 data-md-source 没有更新，所以 getValue / AI 读到的 markdown 仍是
+ * 原始 source，丢失内层嵌套。
+ *
+ * 解决：在 applyStyleInPreview 嵌套包 span 之后，立刻重序列化 visualHost，
+ * 把更新后的 markdown 写回 data-md-source。
+ *
+ * 不递归处理嵌套的 html-inline shell（Vditor 不允许 shell 嵌套 shell）。
+ */
+/**
+ * C4 修复：data-md-source 是 HTML 属性，必须 escapeAttr + MD_SOURCE_ESC_NEWLINE 编码
+ * （与 renderHtmlInlineShell 写 data-md-source 时的约定一致）。
+ */
+export const flattenNestedHtmlInline = (root: HTMLElement | Document = document.body) => {
+    root.querySelectorAll('[data-type="html-inline"]').forEach((shell) => {
+        const visualHost = shell.querySelector(".vditor-html-inline__display");
+        if (!visualHost) {
+            return;
+        }
+        const newMd = visualHostToMarkdown(visualHost as HTMLElement)
+            .replaceAll("\n", MD_SOURCE_ESC_NEWLINE);
+        shell.setAttribute("data-md-source", escapeAttr(newMd));
+    });
+};
+
+
 const renderHtmlBlockFromMd = (vditor: IVditor, md: string): string => {
     const trimmed = md.trim();
     if (!trimmed) {
@@ -909,6 +939,9 @@ export const showHtmlEditorPopover = (vditor: IVditor, target: HtmlEditTarget) =
             newRange.selectNodeContents(span);
             newRange.collapse(false);
             selection!.addRange(newRange);
+            // MED-3：嵌套 span 创建后立刻把 visualHost 重序列化到 data-md-source，
+            // 否则 getValue / AI 拿到的 markdown 还是原始 source（丢内层色）
+            flattenNestedHtmlInline(visualHost.closest('[data-type="html-inline"]')?.parentElement ?? document);
             return;
         }
 
@@ -940,6 +973,8 @@ export const showHtmlEditorPopover = (vditor: IVditor, target: HtmlEditTarget) =
             wrapper.appendChild(visualHost.firstChild);
         }
         visualHost.appendChild(wrapper);
+        // MED-3：同步 outer shell 的 data-md-source（whole-content 路径也可能产生嵌套）
+        flattenNestedHtmlInline(visualHost.closest('[data-type="html-inline"]')?.parentElement ?? document);
     };
 
     // 模式状态：默认预览（更符合用户直觉）

@@ -461,9 +461,9 @@ interface IHint {
 interface IAIPolishOptions {
     goal?: string;
     prompt?: string;
-    engine?: "vscode" | "custom";
+    engine?: AIEngine;
     /** auto = follow UI language */
-    outputLanguage?: "auto" | "en_US" | "zh_CN" | "zh_TW" | "ja_JP" | "ko_KR" | "ru_RU";
+    outputLanguage?: AIOutputLanguage;
     /** Current editor UI language (vditor.options.lang) */
     uiLanguage?: string;
     vscodeModelId?: string;
@@ -472,6 +472,123 @@ interface IAIPolishOptions {
     customModel?: string;
     /** auto | openai | anthropic | gemini | ollama */
     customApiFormat?: "auto" | "openai" | "anthropic" | "gemini" | "ollama";
+    /**
+     * 用户在 AI 浮动输入面板 textarea 里输入的原文（区别于 goal）。
+     * 宿主可以在拼 system prompt 时单独引用（如作为"用户额外指令"），
+     * 也可以不引用直接用 goal。
+     */
+    userInput?: string;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AI 配置公共类型（用于 getAIPrompts / setAISettings 等公开 API）
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** AI 输出语言选项。"auto" 表示跟随 UI 语言 */
+type AIOutputLanguage = "auto" | "en_US" | "zh_CN" | "zh_TW" | "ja_JP" | "ko_KR" | "ru_RU";
+
+type AIEngine = "vscode" | "custom";
+
+/** 单个提示词。`id` 由 setAIPrompts 自动生成或外部指定 */
+interface AIPrompt {
+    id: string;
+    name: string;
+    content: string;
+}
+
+/** 单个 AI 模型配置 */
+interface AIModel {
+    id: string;
+    name: string;
+    url: string;
+    key: string;
+    model: string;
+    format: string;
+}
+
+/** 单个快捷操作（Quick Action）。点击后写入 goal textarea */
+interface AIPreset {
+    /** 唯一标识（内置 preset 用固定 key，如 "polish"/"shorten"） */
+    key: string;
+    /** 显示标签；若 i18nKey 翻译命中则用翻译，否则用 label */
+    label: string;
+    /** 可选 i18n key（内置 preset 用此做多语言） */
+    i18nKey?: string;
+    /** 点击后写入 goal textarea 的文本 */
+    goal: string;
+    /**
+     * 顶部分组。仅 AI 浮动输入面板（AIInputPanel）使用。
+     * - "writing" → 直接渲染为 chip（续写/伴写）
+     * - "rewrite" → 归入 "AI 帮我改" 下拉子项（润色/扩写/缩写/重写/换同义词）
+     * - 缺省 → aiDialog 旧 chip 路径（polish/shorten/expand/grammar/clarity/translate）
+     */
+    category?: "writing" | "rewrite";
+}
+
+/** AI 弹窗当前选中项的聚合 */
+interface IAISelections {
+    engine: AIEngine;
+    /** AIPrompt.id；空串表示"未选择" */
+    selectedPrompt: string;
+    /** AIModel.id；空串表示"未选择" */
+    selectedModel: string;
+    outputLanguage: AIOutputLanguage;
+}
+
+/** getAISettings() 一次返回的全部 AI 配置 */
+interface IAISettings {
+    prompts: AIPrompt[];
+    models: AIModel[];
+    presets: AIPreset[];
+    selections: IAISelections;
+}
+
+/** setAISettings() 的 partial 入参；每个字段可选 */
+interface IAISettingsPatch {
+    prompts?: AIPrompt[];
+    models?: AIModel[];
+    presets?: AIPreset[];
+    selections?: Partial<IAISelections>;
+}
+
+/**
+ * Vditor 实例上的 AI 命名空间（`vd.ai.*`）类型定义。
+ * 与 Vditor 上扁平 AI 方法（vd.getAIPrompts 等）一一对应，便于聚合调用风格。
+ */
+interface IVditorAI {
+    // Prompts CRUD
+    getPrompts: () => AIPrompt[];
+    setPrompts: (prompts: AIPrompt[]) => void;
+    addPrompt: (input: Omit<AIPrompt, "id">) => AIPrompt;
+    updatePrompt: (id: string, patch: Partial<Omit<AIPrompt, "id">>) => AIPrompt | null;
+    removePrompt: (id: string) => boolean;
+    // Models CRUD
+    getModels: () => AIModel[];
+    setModels: (models: AIModel[]) => void;
+    addModel: (input: Omit<AIModel, "id">) => AIModel;
+    updateModel: (id: string, patch: Partial<Omit<AIModel, "id">>) => AIModel | null;
+    removeModel: (id: string) => boolean;
+    // Presets CRUD
+    getPresets: () => AIPreset[];
+    setPresets: (presets: AIPreset[]) => void;
+    addPreset: (input: Omit<AIPreset, "key">) => AIPreset;
+    updatePreset: (key: string, patch: Partial<Omit<AIPreset, "key">>) => AIPreset | null;
+    removePreset: (key: string) => boolean;
+    resetPresets: () => void;
+    // Selections 单值
+    getSelections: () => IAISelections;
+    setSelections: (partial: Partial<IAISelections>) => void;
+    getEngine: () => AIEngine;
+    setEngine: (engine: AIEngine) => void;
+    getSelectedPrompt: () => string;
+    setSelectedPrompt: (id: string) => void;
+    getSelectedModel: () => string;
+    setSelectedModel: (id: string) => void;
+    getOutputLanguage: () => AIOutputLanguage;
+    setOutputLanguage: (lang: AIOutputLanguage) => void;
+    // 批量接口
+    getSettings: () => IAISettings;
+    setSettings: (patch: IAISettingsPatch) => void;
 }
 
 type ViewerSettingsExport = {

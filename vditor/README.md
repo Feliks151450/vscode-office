@@ -768,7 +768,9 @@ onSettingsChange?(settings: ViewerSettingsExport): void;
 | blur() | 让编辑器失焦 |
 | disabled() | 禁用编辑器 |
 | enable() | 解除编辑器禁用 |
-| getSelection(): string | 返回选中的字符串 |
+| getSelection(): string | 返回选中的字符串（纯文本，**会丢 html-inline / 行内 math / 颜色 span**）。需要结构化 markdown 用 `getSelectionMarkdown()` |
+| getSelectionMarkdown(): string | 返回选区的结构化 markdown。**保留** `<html-inline>` shell / 行内 math `$...$` / 颜色 `<span style>` |
+| setValue(markdown: string, clearStack = false) | 设置编辑器内容且选中清空历史栈 |
 | setValue(markdown: string, clearStack = false) | 设置编辑器内容且选中清空历史栈 |
 | clearStack() | 清空撤销和重做记录栈|
 | renderPreview(value?: string) | 设置预览区域内容 |
@@ -1014,6 +1016,139 @@ vd.setViewerSettingsSyncEnabled(true);
 
 批量导入场景下会自动抑制回调（避免导入自己触发回调），见 `importViewerSettings`。
 
+### AI 配置 API
+
+AI 对话面板涉及 4 类持久化数据 + 当前选中项，提供**扁平方法**（`vd.getAIPrompts()` 等）、**`vd.ai.*` 命名空间**（与扁平方法 1:1 对应，便于聚合调用风格），以及**批量接口**（`vd.getAISettings()` / `vd.setAISettings()`）。所有 setter 在写入后会自动刷新已打开的 AI 弹窗 UI 和工具栏设置面板。
+
+#### 数据类型
+
+```ts
+interface AIPrompt {
+    id: string;          // 由 addAIPrompt 自动生成；外部 setAIPrompts 也可自填
+    name: string;        // 显示名
+    content: string;     // 注入 LLM 的 system 文本
+}
+
+interface AIModel {
+    id: string;
+    name: string;        // 可为空，UI 用 nameFromUrl(url) 兜底
+    url: string;         // API 端点
+    key: string;
+    model: string;       // 支持 "gpt-4o,gpt-4o-mini" 逗号分隔多模型
+    format: "auto" | "openai" | "anthropic" | "gemini" | "ollama";
+}
+
+interface AIPreset {
+    key: string;         // 内置 preset 用固定 key（"polish"/"shorten" 等）；自定义用 "custom-<ts>"
+    label: string;       // 默认显示标签
+    i18nKey?: string;    // 可选 i18n key（内置 preset 用此做多语言）
+    goal: string;        // 点击后写入 goal textarea 的文本
+}
+
+type AIEngine = "vscode" | "custom";
+
+interface IAISelections {
+    engine: AIEngine;                // 当前引擎 tab
+    selectedPrompt: string;          // AIPrompt.id；空串表示"未选"
+    selectedModel: string;           // AIModel.id；空串表示"未选"
+    outputLanguage: "auto" | "en_US" | "zh_CN" | "zh_TW" | "ja_JP" | "ko_KR" | "ru_RU";
+}
+
+interface IAISettings {
+    prompts: AIPrompt[];
+    models: AIModel[];
+    presets: AIPreset[];
+    selections: IAISelections;
+}
+
+interface IAISettingsPatch {
+    prompts?: AIPrompt[];
+    models?: AIModel[];
+    presets?: AIPreset[];
+    selections?: Partial<IAISelections>;
+}
+```
+
+#### 方法清单
+
+| 类别 | 方法 | 说明 |
+| - | - | - |
+| Prompts | `getAIPrompts()` / `setAIPrompts(prompts)` | 整体读写；首次返回内置 3 个默认 |
+| Prompts | `addAIPrompt(input)` → `AIPrompt` | 自动生成 id；返回新对象 |
+| Prompts | `updateAIPrompt(id, patch)` → `AIPrompt \| null` | 找不到返回 null |
+| Prompts | `removeAIPrompt(id)` → `boolean` | 是否真的删了 |
+| Models | `getAIModels()` / `setAIModels(models)` | 整体读写；首次返回空数组 |
+| Models | `addAIModel(input)` / `updateAIModel(id, patch)` / `removeAIModel(id)` | CRUD，同上 |
+| Presets | `getAIPresets()` / `setAIPresets(presets)` | 整体读写；首次返回内置 6 个默认 |
+| Presets | `addAIPreset(input)` / `updateAIPreset(key, patch)` / `removeAIPreset(key)` | CRUD，同上 |
+| Presets | `resetAIPresets()` | 清空用户自定义，恢复内置默认 |
+| Selections | `getAISelections()` / `setAISelections(partial)` | 整体读写选中项；partial 字段可选 |
+| Selections | `getAIEngine()` / `setAIEngine(engine)` | 引擎单值读写 |
+| Selections | `getAISelectedPrompt()` / `setAISelectedPrompt(id)` | 选中 prompt 单值 |
+| Selections | `getAISelectedModel()` / `setAISelectedModel(id)` | 选中 model 单值 |
+| Selections | `getAIOutputLanguage()` / `setAIOutputLanguage(lang)` | 输出语言单值 |
+| 批量 | `getAISettings()` → `IAISettings` | 一次读全部 |
+| 批量 | `setAISettings(patch: IAISettingsPatch)` | 一次写（partial），触发一次 `onSettingsChange` 通知 |
+
+所有方法在 `Vditor` 实例上**同时提供扁平和 `vd.ai.*` 两种调用形态**，例如：
+
+```js
+// 扁平风格（与 vd.getEditorSettings 等已有方法风格一致）
+vd.getAIPrompts();
+vd.setAIPrompts([{ id: 'p1', name: 'Polite tone', content: 'Rewrite in polite tone' }]);
+
+// 命名空间风格（聚合，便于链式 / 命名空间管理）
+vd.ai.getPrompts();
+vd.ai.addPrompt({ name: 'Polite tone', content: 'Rewrite in polite tone' });
+vd.ai.setSettings({ presets: [{ key: 'polish-cn', label: '润色', goal: '润色文本，保持原意' }] });
+```
+
+> ⚠️ **变更通知**：以上 setter 是程序化 API 调用，**不会逐字段**触发 `onSettingsChange` 回调；只有 `setAISettings()` 会在末尾统一触发一次。如需宿主感知：
+>
+> ```js
+> vd.setViewerSettingsSyncEnabled(true); // 开启同步
+> // 然后 vd.setAIPrompts([...]) / vd.setAISettings({...}) 都会触发 onSettingsChange
+> ```
+
+#### 完整示例
+
+```js
+const vd = new Vditor('vditor', { /* ... */ });
+
+// 1) 增加 1 个提示词并选中
+const newPrompt = vd.addAIPrompt({ name: 'Polite tone', content: 'Rewrite in polite tone' });
+vd.setAISelectedPrompt(newPrompt.id);
+
+// 2) 增加 1 个自定义模型
+const newModel = vd.addAIModel({
+    name: 'My OpenAI',
+    url: 'https://api.example.com/v1',
+    key: 'sk-...',
+    model: 'gpt-4o',
+    format: 'openai',
+});
+vd.setAISelectedModel(newModel.id);
+
+// 3) 增加 1 个自定义快捷操作
+vd.addAIPreset({ label: '润色为正式语气', goal: 'Rewrite in formal tone while preserving meaning' });
+
+// 4) 一次性导出/导入（用于配置文件同步）
+const snapshot = vd.getAISettings();
+fs.writeFileSync('ai-config.json', JSON.stringify(snapshot, null, 2));
+// 之后想恢复：
+const restored = JSON.parse(fs.readFileSync('ai-config.json', 'utf-8'));
+vd.setAISettings(restored);
+
+// 5) 重置 presets 为内置默认
+vd.resetAIPresets();
+```
+
+存储位置：
+
+- Prompts / Models / Presets 列表 → `localStorage.vditor-global-settings.aiPrompts|aiModels|aiPresets`（JSON 字符串）
+- 选中项 4 个 key → `localStorage.aiEngine|aiSelectedModel|aiSelectedPrompt|aiOutputLanguage`（顶层 key）
+- 已被 `setViewerSettingsSyncEnabled(true) + onSettingsChange` 链路感知，见上方"监听设置变化"小节
+
 ### 从外部打开弹窗
 
 某些场景需要在编辑器外（右键菜单、命令面板、自定义快捷键、宿主菜单栏）主动打开 Vditor 的内置弹窗。Vditor 对这类调用方提供了 3 个公开方法，**已经处理了选区捕获、关其它弹层、面板定位等细节**，不需要再操作内部 DOM。
@@ -1192,6 +1327,48 @@ AI 弹窗打开时会调用 `captureEditorSelection`（[frozenSelection.ts:72-10
 
 `http://www.plantuml.com/plantuml/svg/~1...`（[plantumlRender.ts](vditor/src/ts/markdown/plantumlRender.ts)）—— 企业内网无法访问外网时所有 plantuml 图全挂。
 
+### Markdown 内容保真度
+
+Vditor 在 DOM 中维护一套**专属结构**让 Markdown 渲染保持可逆：
+
+| 结构 | 关键属性 / 约定 |
+|---|---|
+| html-inline shell | `<span data-type="html-inline" data-md-source="..." contenteditable="false">` —— `data-md-source` 是**唯一可信源** |
+| 行内 math | `<code data-type="math-inline">` 开头有 ZWSP 防 CodeMirror 把整段当空段 |
+| 块 math | `<div data-type="math-block">` + `<pre><code>` 隐藏源 |
+| 代码块 | `<pre data-type="code-block">` + `<code class="language-X">` 双轨（隐藏源 + CM 实例） |
+| 嵌套色 / 嵌套 span | 内层 `<span style="...">` 包在外层 shell 内 |
+
+所有"取 markdown"的出口都通过统一 helper `cleanFragmentForMarkdown`（[cleanFragmentForMarkdown.ts](vditor/src/ts/markdown/cleanFragmentForMarkdown.ts)）保证不丢这些结构：
+
+```
+                          DOM                  提取流程
+                            │
+   getValue() ─────────────►│  buildEditorHtmlForMarkdown + VditorDOM2Md   ──► markdown
+                            │
+   blockToMarkdown() ──────►│  clone + cleanFragmentForMarkdown + VditorDOM2Md
+                            │
+   rangeToMarkdown() ──────►│  range.cloneContents + cleanFragmentForMarkdown + VditorDOM2Md
+                            │
+   applyAIResult(...) ─────►│  markdown → Md2VditorDOM（html-inline 保护） + 插入
+```
+
+**统一规则**：
+
+* **入口**（取 markdown）：永远走 `cleanFragmentForMarkdown`，不要直接 `selection.toString()` / `range.toString()`
+* **出口**（写 markdown）：永远走 `Md2VditorDOM`（已被 `setLute` 的 `wrapMdRender` 包裹，自动保护 html-inline）
+* **嵌套**：每次 `applyStyleInPreview` 在 html-inline shell 内创建嵌套 span 后立即调 `flattenNestedHtmlInline`，让外层 shell 的 `data-md-source` 同步。`setSelectionColor` 通过 html-inline shell 间接实现，自身不调 flattenNestedHtmlInline（依赖 applyStyleInPreview 的链路）。
+* **`data-md-source` 编码**（C4 细节）：html-inline shell 的 `data-md-source` 属性值由 `escapeAttr` + `_esc_newline_` 占位符编码，与 `renderHtmlInlineShell` 写时一致。`flattenNestedHtmlInline` 写时也走这个编码——visualHost 文本出现 `<` `>` `"` 换行时不会破坏 attribute。
+
+**容易踩坑的场景**：
+
+| 场景 | 错误做法 | 正确做法 |
+|---|---|---|
+| 拿到选区 markdown | `selection.toString()` 丢全部结构 | `vd.getSelectionMarkdown()` |
+| 块菜单"复制 Markdown" | 直接 `VditorDOM2Md(block.outerHTML)` | `vd` 内部已用 `blockToMarkdown` |
+| 编程注入 markdown | `vd.insertValue(md)` 当 html 走 | `vd.insertMarkdown(md)` |
+| AI 回写 | 手动 `execCommand('delete')` 撕结构 | `vd.applyAIResult`（带 Range 校验 + 安全降级） |
+
 ### 宿主集成 / 自定义 URL 协议（vscode-office）
 
 本 fork 与宿主 App 通信**不走 postMessage**，而是 5 个**自定义 URL scheme**（用 `window.location.href = "scheme://..."` 触发）。宿主在 WKWebView / WebView 拦截 scheme 即可：
@@ -1203,8 +1380,43 @@ AI 弹窗打开时会调用 `captureEditorSelection`（[frozenSelection.ts:72-10
 | `nativeCopy://content=<text>` | `copyToClipboard()` 或 block 菜单复制 | URL 编码的复制内容 | 写入系统剪贴板 |
 | `nativeCommand://save` | 工具栏 save 按钮 / `⌘S` | 无参数 | 触发宿主保存；**协议本身无去重 / 节流**，宿主侧应防抖 |
 | `editorexit://content=123` | `options.esc()` 回调 | 当前固定为 `123`（**未回传内容**） | 若要 ESC 退出带走文本须改 `esc` 配置 |
+| `aipolish://content=<json>` | `options.ai.onPolish` 回调（AI 润色请求） | URL 编码 JSON：`{ markdown, isSelection, replaceAll, options }` | 宿主解析后发起 LLM 请求；回写方式见下方 |
+| `aipolishcancel://content=1` | `options.ai.onCancelPolish`（用户点 Stop） | 固定 `1` | 宿主侧中断在飞的 LLM 请求 |
 
 **所有协议都通过 `window.location.href` 触发**，宿主在 WKWebView 拦截 `scheme:` URL 即可，不是 postMessage。详见 [vditorProFunc.js](vditor/vditorProFunc.js) 实现。
+
+#### AI 润色回写协议
+
+`aipolish://` 只是请求信号，宿主拦截后发起 LLM 请求，结果通过 WebView 的 `evaluateJavaScript` 调以下三个全局函数回写（vditorProFunc.js 已挂到 `window`）：
+
+| 函数 | 用途 |
+| - | - |
+| `window.applyAIResult(markdown, replaceAll?, range?)` | 一次性写入。`replaceAll = true` 全量替换；`false` 替换选区（`range` 需用 `{ startOffset, endOffset, startText, endText }` 序列化） |
+| `window.streamAIChunk(chunk)` | 流式推送一段增量，实时更新审阅面板 diff |
+| `window.endAIStream()` | 流式结束，启用审阅面板的 Accept 按钮 |
+
+**推荐流式**（用户体验更好）：
+
+```js
+// 宿主侧（伪代码，WKWebView evaluateJavaScript）
+onChunkFromLLM(chunk) {
+  webView.evaluateJavaScript(`window.streamAIChunk(${JSON.stringify(chunk)})`);
+}
+onStreamDone(fullMarkdown) {
+  webView.evaluateJavaScript(`
+    window.endAIStream();
+    // 不需要主动 applyAIResult —— 用户在审阅面板点 Accept 才触发
+  `);
+}
+```
+
+**一次性回写**（LLM 不支持流式时）：
+
+```js
+webView.evaluateJavaScript(
+  `window.applyAIResult(${JSON.stringify(rewrittenMarkdown)}, true)`
+);
+```
 
 ### 集成陷阱速查
 
@@ -1230,6 +1442,11 @@ AI 弹窗打开时会调用 `captureEditorSelection`（[frozenSelection.ts:72-10
 18. **`openSettings` / `closeSettings` 强依赖 toolbar 含 `settings` 项**；删掉后失效。
 19. **`setCodeTheme` 写 `<html data-code-theme>` 是全局副作用**，影响其它 CodeMirror 实例。
 20. **`options.toolbar` 用对象形式覆盖时只 shallow merge**，不声明的 `prefix` / `suffix` 不会被清，但只声明 `icon` / `hotkey` 会清掉其它默认。
+21. **`getSelection()` 返回纯文本，丢所有 Vditor 专属结构**（html-inline / 行内 math / 颜色 span）。AI 场景必须用 `getSelectionMarkdown()`——见 [Markdown 内容保真度](#markdown-内容保真度)。
+22. **`openAIPolishDialog()` 内部已走结构化提取**（`rangeToMarkdown`）——AI 看到的原文不再是裸文本。但要求 `options.ai.onPolish` 已配置（见 #16）。
+23. **`applyAIResult(markdown, replaceAll=false, range?)` 的 `range` 必须含真实 DOM 节点引用**，不能只传 offset + textContent（详情见 [AI 回写协议](#ai-润色回写协议)）。
+24. **嵌套 html-inline 写入后没调 `flattenNestedHtmlInline`**：用户在已着色文字上再加颜色，外层 shell 的 `data-md-source` 仍只有原始 source，内层样式丢。`getValue()` / `AI 润色` 都会读到这个不一致。
+25. **`insertValue` / `updateValue` 已支持智能识别**：传 HTML（含 `<xxx>`）走 insertHTML 路径；传纯 Markdown 走 Lute 解析路径。不要再手动 `execCommand('insertHTML')`。
 
 ## 🏗 开发文档
 

@@ -1,11 +1,12 @@
 import {setSelectionFocus} from "../util/selection";
 import {renderTocNow} from "../util/toc";
 import {afterRenderEvent} from "./afterRenderEvent";
-import {isCmCodeBlock, removeCmCodeBlock, renderCodeBlocks} from "../codeBlock/codeMirrorManager";
+import {isCmCodeBlock, removeCmCodeBlock, renderCodeBlocks, flushCodeMirrorToSyncCode} from "../codeBlock/codeMirrorManager";
 import {insertEmptyBlock, listToggle} from "../util/fixBrowserBehavior";
 import {setHeading, removeHeading} from "./setHeading";
 import {processHeading} from "../ir/process";
 import {codicon} from "../util/codicon";
+import {cleanFragmentForMarkdown, flushEditorState} from "../markdown/cleanFragmentForMarkdown";
 
 const BLOCK_MENU_CLASS = "vditor-block-menu";
 const BLOCK_MENU_VISIBLE_CLASS = "vditor-block-menu--visible";
@@ -19,7 +20,10 @@ interface IBlockMenuState {
     handleRoot: HTMLElement | null;
 }
 
-const menuMap = new WeakMap<IVditor, IBlockMenuState>();
+const menuMap = new Map<IVditor, IBlockMenuState>();
+
+/** 块菜单 AI 选项的全局开关（所有 vditor 实例共享）。由 setBlockMenuAIAvailable 控制。 */
+let aiBlockAvailable = false;
 
 type BlockAction =
     | "paragraph"
@@ -27,7 +31,9 @@ type BlockAction =
     | "list" | "ordered-list" | "check"
     | "quote" | "code"
     | "insert-before" | "insert-after"
-    | "duplicate" | "copy" | "delete";
+    | "duplicate" | "copy" | "delete"
+    | "ai-polish"
+    | "ai-input";
 
 interface IBlockMenuItem {
     type?: "divider" | "label";
@@ -55,6 +61,11 @@ const BLOCK_MENU_ITEMS: IBlockMenuItem[] = [
     { action: "quote", label: "引用", icon: "quote" },
     { action: "code", label: "代码块", icon: "code" },
     { type: "divider" },
+    // AI 润色块：仅在 aiBlockAvailable=true 时由 renderMenuItems 渲染（见 setBlockMenuAIAvailable）
+    { action: "ai-polish", label: "AI 润色", icon: "sparkle" },
+    // AI 帮我：打开 AI 浮动输入面板，位置跟随 block
+    { action: "ai-input", label: "AI 帮我", icon: "comment-discussion" },
+    { type: "divider" },
     { action: "duplicate", label: "复制块", icon: "copy" },
     { action: "copy", label: "复制 Markdown", icon: "clippy" },
     { action: "delete", label: "删除块", icon: "trash" },
@@ -68,6 +79,7 @@ const BLOCK_MENU_ACTIONS: readonly string[] = [
     "paragraph", "h1", "h2", "h3", "h4", "h5", "h6",
     "list", "ordered-list", "check", "quote", "code",
     "insert-before", "insert-after", "duplicate", "copy", "delete",
+    "ai-polish", "ai-input",
 ];
 
 declare global {
@@ -122,25 +134,50 @@ const placeRangeInBlock = (block: HTMLElement, editorElement?: HTMLElement) => {
  */
 const convertToCodeBlock = (vditor: IVditor, block: HTMLElement) => {
     const isWysiwyg = vditor.currentMode === "wysiwyg";
+    // MED-6：转 code-block 前 flushCodeMirror，保证隐藏 <code> 同步了最新 CM 文本
+    flushCodeMirrorToSyncCode(vditor);
+    // n9 修复：转换前先把原 block 文本提出来作为新 code-block 的初始内容。
+    // 之前永远是空 `<pre><code><wbr>\n</code></pre>`，用户转完后内容丢光。
+    const text = (block.textContent || "").replace(/\n+$/, "");
+    const initialContent = text ? text + "\n" : "";
     const node = document.createElement("div");
     node.className = isWysiwyg ? "vditor-wysiwyg__block" : "vditor-ir__node";
     node.setAttribute("data-type", "code-block");
     node.setAttribute("data-block", "0");
     node.setAttribute("data-marker", "```");
-    node.innerHTML = "<pre><code><wbr>\n</code></pre>";
+    // 用 <wbr> + \n 占位保留内容，避免初始的 CM bind 失败
+    node.innerHTML = `<pre><code><wbr>${escapeHtml(initialContent)}</code></pre>`;
     block.parentElement?.insertBefore(node, block.nextSibling);
     block.remove();
     renderCodeBlocks(vditor);
     afterRenderEvent(vditor);
 };
 
+// 简单 HTML escape：用于把原 block 文本塞进新 <code> 时防注入
+const escapeHtml = (s: string): string => s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+
 const convertToQuote = (vditor: IVditor, block: HTMLElement) => {
     const isWysiwyg = vditor.currentMode === "wysiwyg";
+    // C5 修复：不再直接复制 block.innerHTML（会带 hidden <code>、preview SVG、math CM 实例等渲染产物）
+    // 改走 "块 → markdown → Lute 渲染 → quote" 完整链路：
+    //   1. blockToMarkdown 提取干净 markdown
+    //   2. Md2VditorDOM / Md2VditorIRDOM 渲染为新 DOM
+    //   3. 塞进 quote
+    //   4. 删原 block
+    const markdown = blockToMarkdown(vditor, block);
+    const html = isWysiwyg
+        ? vditor.lute.Md2VditorDOM(markdown)
+        : vditor.lute.Md2VditorIRDOM(markdown);
     const wrapper = document.createElement(isWysiwyg ? "div" : "p");
     wrapper.className = isWysiwyg ? "vditor-wysiwyg__block" : "vditor-ir__node";
     const quote = document.createElement("blockquote");
     quote.setAttribute("data-block", "0");
-    quote.innerHTML = block.innerHTML;
+    // 把渲染后的内容塞进 quote（保留 paragraph 列表等结构）
+    quote.innerHTML = html;
     wrapper.appendChild(quote);
     block.parentElement?.insertBefore(wrapper, block.nextSibling);
     block.remove();
@@ -150,7 +187,41 @@ const convertToQuote = (vditor: IVditor, block: HTMLElement) => {
 const duplicateBlock = (vditor: IVditor, block: HTMLElement) => {
     const clone = block.cloneNode(true) as HTMLElement;
     block.parentElement?.insertBefore(clone, block.nextSibling);
+    // LOW-7：cloneNode 后调 renderCodeBlocks 让克隆块重新挂 CodeMirror，
+    // 否则克隆块里 CM 实例化状态（view/host）继续指向原块，两个块共享同一 <code>
+    renderCodeBlocks(vditor);
     afterRenderEvent(vditor);
+};
+
+/**
+ * 把块的 HTML 转成干净的 Markdown（保留 html-inline / 行内公式等 Vditor 专属结构）。
+ * 复用于"复制为 Markdown"和"AI 润色块"两个入口——前者写到剪贴板，后者送给 AI。
+ *
+ * 必须先预处理块 HTML，否则 Lute 在转 markdown 时会把渲染产物当内容读：
+ *   1) <code data-type="math-inline"> 内联公式源：HTML2Md 不认识 data-type="math-inline"，
+ *      会把 <code> 当 inline code 输出 `` `latex` ``（带反引号），且不会丢掉紧随其后的
+ *      <mjx-container> SVG 内容，于是 $asdf$ 被复制成 `` asdf`asdf `` 这种样子；
+ *   2) <code> 文本开头按约定带 ZWSP（防 CodeMirror 把整段当空段），不属于 markdown 输出；
+ *   3) code-block / math-block 的预览容器（vditor-wysiwyg__preview 里的 SVG）必须整段剥掉；
+ *   4) html-inline shell 的 data-md-source 必须被读出来（getSelection().toString() 只取文本节点，
+ *      会丢 <span style="...">包装）——见 blockToMarkdown 的 html-inline 处理分支。
+ */
+export const blockToMarkdown = (vditor: IVditor, block: HTMLElement): string => {
+    // 委托给统一清理 helper——未来加新节点类型只改 cleanFragmentForMarkdown
+    // 重要：clone 之前必须先 flush live editor 状态（CM / math-inline 编辑缓冲写回 DOM），
+    // 否则 clone 拿到的是 stale DOM 文本。
+    // flushEditorState 加 flushFrontMatter: false 避免 YAML popover 被强制关闭。
+    flushEditorState(vditor, { flushFrontMatter: false });
+    const clone = block.cloneNode(true) as HTMLElement;
+    const html = cleanFragmentForMarkdown(vditor, clone);
+    try {
+        return vditor.currentMode === "ir"
+            ? (vditor.lute?.VditorIRDOM2Md(html) ?? "")
+            : (vditor.lute?.VditorDOM2Md(html) ?? "");
+    } catch (err) {
+        console.error("[blockMenu] VditorDOM2Md failed:", err);
+        return "";
+    }
 };
 
 /**
@@ -160,38 +231,7 @@ const duplicateBlock = (vditor: IVditor, block: HTMLElement) => {
  * 未注入时再降级 navigator.clipboard.writeText → execCommand("copy")。
  */
 const copyBlockAsMarkdown = async (vditor: IVditor, block: HTMLElement) => {
-    // 必须先预处理块 HTML，否则 Lute 在转 markdown 时会把渲染产物当内容读：
-    //   1) <code data-type="math-inline"> 内联公式源：HTML2Md 不认识 data-type="math-inline"，
-    //      会把 <code> 当 inline code 输出 `` `latex` ``（带反引号），且不会丢掉紧随其后的
-    //      <mjx-container> SVG 内容，于是 $asdf$ 被复制成 `` asdf`asdf `` 这种样子；
-    //   2) <code> 文本开头按约定带 ZWSP（防 CodeMirror 把整段当空段），不属于 markdown 输出；
-    //   3) code-block / math-block 的预览容器（vditor-wysiwyg__preview 里的 SVG）必须整段剥掉。
-    const clone = block.cloneNode(true) as HTMLElement;
-    // 块级预览（已渲染的 math/code 块）：整段移除，只保留源 code
-    clone.querySelectorAll(".vditor-wysiwyg__preview, .vditor-ir__preview").forEach((el) => el.remove());
-    // 行内公式的 CodeMirror 编辑实例化容器
-    clone.querySelectorAll(".vditor-math-inline__cm-host, .cm-editor, .vditor-cm-chrome, .vditor-editor-boundary").forEach((el) => el.remove());
-    // 行内公式 editing 态：清掉 class 让 <code> 重新可见（display:none）
-    clone.querySelectorAll(".vditor-math-inline--editing").forEach((el) => el.classList.remove("vditor-math-inline--editing"));
-    // 行内公式源 <code> 的 ZWSP 前缀是 Vditor 内部约定（防止 CodeMirror 把整段当成空文档），
-    // 不属于 markdown 内容；剥离后输出 $latex$ 才干净。
-    clone.querySelectorAll("code[data-type='math-inline']").forEach((el) => {
-        // Constants.ZWSP = "​"：行内公式源 codeEl 的开头约定塞一个 ZWSP，避免 CodeMirror
-        // 把整段当成空文档；不属于 markdown 输出，剥离后 VditorDOM2Md 才能输出干净的 $latex$。
-        el.textContent = (el.textContent || "").replaceAll("​", "");
-    });
-    const html = clone.outerHTML;
-    let markdown = "";
-    try {
-        // 走 VditorDOM2Md / VditorIRDOM2Md 而非 HTML2Md：前者认 data-type="math-inline"、
-        // data-type="math-block" 等 Vditor 专属属性，能把内联 / 行间公式正确转回 $...$ / ```math```。
-        // HTML2Md 是通用 HTML→MD，不感知这些 data-type，对 <code data-type="math-inline"> 退化成反引号。
-        markdown = vditor.currentMode === "ir"
-            ? (vditor.lute?.VditorIRDOM2Md(html) ?? "")
-            : (vditor.lute?.VditorDOM2Md(html) ?? "");
-    } catch (err) {
-        console.error("[blockMenu] VditorDOM2Md failed", err);
-    }
+    const markdown = blockToMarkdown(vditor, block);
     // 1) 宿主接管：vditorProFunc.js 注入的 nativeCopy:// 桥
     const hostCopy = (window as Window & {
         copyToClipboard?: (text: string) => void;
@@ -312,11 +352,34 @@ const dispatchBlockAction = (vditor: IVditor, block: HTMLElement, action: BlockA
         insertEmptyBlock(vditor, position, block);
         return;
     }
+
+    if (action === "ai-polish") {
+        // AI 润色块：用 vd.triggerAIPolishBlock(block) 而不是 vd.openAIPolishDialog()——
+        // 后者用 getSelection().toString() 取原文，会丢 html-inline / 行内公式等结构；
+        // 前者走 blockToMarkdown 完整提取块的 markdown，保留结构。
+        const publicVd = (window as Window & {
+            vditor?: { triggerAIPolishBlock(block: HTMLElement): void };
+        }).vditor;
+        publicVd?.triggerAIPolishBlock?.(block);
+        return;
+    }
+
+    if (action === "ai-input") {
+        // AI 浮动输入面板：位置跟随 block（显示在 block 下方）
+        const publicVd = (window as Window & {
+            vditor?: { openAIInputPanel(target: HTMLElement): void };
+        }).vditor;
+        publicVd?.openAIInputPanel?.(block);
+        return;
+    }
 };
 
 const renderMenuItems = (menu: HTMLElement) => {
     menu.innerHTML = "";
     for (const item of resolveBlockMenuItems()) {
+        // AI 润色项按全局开关过滤（aiBlockAvailable=false 时不渲染）。
+        // ai-input（AI 浮动输入面板）不依赖 Copilot，始终显示。
+        if (item.action === "ai-polish" && !aiBlockAvailable) continue;
         if (item.type === "divider") {
             const div = document.createElement("div");
             div.className = `${BLOCK_MENU_CLASS}__divider`;
@@ -557,4 +620,20 @@ export const destroyBlockMenu = (vditor: IVditor) => {
     menuToState.delete(state.element);
     state.element.remove();
     menuMap.delete(vditor);
+};
+
+/**
+ * 切换块菜单 AI 润色项的显示。true 时菜单里出现"AI 润色"，false 时隐藏。
+ * 关键：必须重新渲染所有已创建的菜单元素——block menu 与 bubble menu 不同，
+ * 是"一次性渲染"策略（renderMenuItems 只在 initBlockMenu 时跑一次），
+ * 不重渲染的话开关改变不会生效。
+ * 幂等：重复设相同值是 no-op（已重新渲染过的会被跳过）。
+ * 全局状态（所有 vditor 实例共享），由 setCopilotAvailable 同步控制。
+ */
+export const setBlockMenuAIAvailable = (available: boolean) => {
+    aiBlockAvailable = !!available;
+    // 重新渲染所有已创建的菜单元素——blockMenu 是"一次性渲染"策略，不重渲则开关失效
+    menuMap.forEach((state) => {
+        renderMenuItems(state.element);
+    });
 };

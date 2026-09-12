@@ -2,6 +2,7 @@ import {
     AI_ENGINE_KEY, AI_SELECTED_MODEL_KEY, AI_SELECTED_PROMPT_KEY, AI_OUTPUT_LANGUAGE_KEY,
     getAIPrompts, setAIPrompts,
     getAIModels, setAIModels,
+    getAIPresets,
     AIPrompt, AIModel,
     setAiPreference,
 } from "../util/globalLocalStorageSettings";
@@ -11,6 +12,7 @@ import {
     getAIOutputLanguageOptionLabel,
     normalizeVditorLang,
 } from "../ai/aiOutputLanguage";
+import { displayPresetLabel, getDefaultPresetGoals } from "../ai/aiPresets";
 import { AI_FORMAT_OPTIONS, nameFromUrl, getProviderIcon } from "./settingsPanel";
 import { accessLocalStorage } from "../util/compatibility";
 import { telemetry } from "../util/telemetry";
@@ -27,35 +29,15 @@ const ls = {
     },
 };
 
-const PRESET_KEYS = ["polish", "shorten", "expand", "grammar", "clarity", "translate"] as const;
-type PresetKey = typeof PRESET_KEYS[number];
-
-const PRESET_I18N: Record<PresetKey, keyof typeof window.VditorI18n> = {
-    polish: "aiPresetPolish",
-    shorten: "aiPresetShorten",
-    expand: "aiPresetExpand",
-    grammar: "aiPresetGrammar",
-    clarity: "aiPresetClarity",
-    translate: "aiPresetTranslate",
-};
-
-const getPresetGoals = (): Record<PresetKey, string> => ({
-    polish: "Polish and improve the writing while preserving meaning",
-    shorten: "Make the text more concise without losing key information",
-    expand: "Expand the text with more detail and depth",
-    grammar: "Fix grammar, spelling, and punctuation errors",
-    clarity: "Improve clarity and readability",
-    translate: "Translate the text to the target output language while preserving meaning and Markdown structure",
-});
-
 const buildPresetChipsHTML = (): string => {
     const i = window.VditorI18n;
+    const presets = getAIPresets();
     let html = `<div class="vditor-ai-dialog__field">
           <label class="vditor-ai-dialog__label">${i.aiQuickActions ?? "Quick actions"}</label>
           <div class="vditor-ai-dialog__presets">`;
-    for (const key of PRESET_KEYS) {
-        const label = i[PRESET_I18N[key]] ?? key;
-        html += `<button type="button" class="vditor-ai-dialog__preset" data-preset="${key}">${label}</button>`;
+    for (const preset of presets) {
+        const label = displayPresetLabel(preset, i);
+        html += `<button type="button" class="vditor-ai-dialog__preset" data-preset="${preset.key}">${label}</button>`;
     }
     html += `</div></div>`;
     return html;
@@ -366,6 +348,7 @@ export class AIDialog {
         this.closeActivePicker();
         this.refreshPrompts();
         this.refreshModels();
+        this.refreshPresets();
         this.refreshOutputLanguage();
         this.refreshEngine();
         this.showPage("main");
@@ -375,6 +358,21 @@ export class AIDialog {
         });
     }
 
+    /**
+     * 重新渲染快捷操作 chips。在外部 setAIPresets() / addAIPreset() 等调用后
+     * 用于让已打开的弹窗 UI 跟随最新数据。
+     */
+    public refreshPresets() {
+        const container = this.overlay.querySelector<HTMLElement>(".vditor-ai-dialog__presets");
+        if (!container) return;
+        // 抽出原有 chips 的 HTML 结构（剥掉外层 field/label），然后重新填入
+        const presets = getAIPresets();
+        const i = window.VditorI18n;
+        container.innerHTML = presets.map((preset) => {
+            const label = displayPresetLabel(preset, i);
+            return `<button type="button" class="vditor-ai-dialog__preset" data-preset="${preset.key}">${label}</button>`;
+        }).join("");
+    }
     private close(reason: "cancel" | "submit" = "cancel") {
         this.overlay.hidden = true;
         this.closeActivePicker();
@@ -435,7 +433,7 @@ export class AIDialog {
         });
     }
 
-    private refreshPrompts() {
+    public refreshPrompts() {
         const i = window.VditorI18n;
         const prompts = getAIPrompts();
         const picker = this.pickers.get("prompt")!;
@@ -462,7 +460,7 @@ export class AIDialog {
         }
     }
 
-    private refreshModels() {
+    public refreshModels() {
         const i = window.VditorI18n;
         const models = getAIModels();
         const picker = this.pickers.get("model")!;
@@ -515,7 +513,7 @@ export class AIDialog {
         ).join("");
     }
 
-    private refreshOutputLanguage() {
+    public refreshOutputLanguage() {
         const picker = this.pickers.get("output-language");
         if (!picker) {
             return;
@@ -543,7 +541,7 @@ export class AIDialog {
         this.updatePickerSelection(picker.optionsEl, this.vscodeModelValue);
     }
 
-    private refreshEngine() {
+    public refreshEngine() {
         const vscodeTab = this.overlay.querySelector<HTMLButtonElement>('.vditor-ai-dialog__engine-tab[data-engine="vscode"]');
         if (vscodeTab) {
             vscodeTab.disabled = !this.copilotAvailable;
@@ -601,7 +599,7 @@ export class AIDialog {
 
             const presetBtn = target.closest<HTMLElement>(".vditor-ai-dialog__preset");
             if (presetBtn?.dataset.preset) {
-                this.applyPreset(presetBtn.dataset.preset as PresetKey, presetBtn);
+                this.applyPreset(presetBtn.dataset.preset ?? "", presetBtn);
                 return;
             }
         });
@@ -708,9 +706,10 @@ export class AIDialog {
         this.showPage("main");
     }
 
-    private applyPreset(key: PresetKey, activeBtn: HTMLElement) {
-        const goals = getPresetGoals();
-        const goal = goals[key];
+    private applyPreset(key: string, activeBtn: HTMLElement) {
+        // 优先从当前预设列表（含用户自定义）查找；找不到时回退到内置默认 goal 表
+        const presets = getAIPresets();
+        const goal = presets.find((p) => p.key === key)?.goal ?? getDefaultPresetGoals()[key];
         if (!goal) {
             return;
         }

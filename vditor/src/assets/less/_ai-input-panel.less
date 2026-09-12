@@ -1,0 +1,325 @@
+// AI 浮动输入面板（AIInputPanel）
+// 三段式结构：card（输入区）+ menu（下方浮层菜单）+ submenu（润色 hover 二级菜单）
+
+.vditor-ai-input-panel {
+    position: absolute;
+    z-index: 10003;  // 高于 bubbleMenu(10001)，低于 blockMenu(100001)
+    width: 480px;
+    max-width: calc(100vw - 32px);
+
+    // ─── 卡片（输入区） ────────────────────────────────────────────────
+    &__card {
+        display: flex;
+        flex-direction: column;
+        gap: 0px;
+        padding: 8px 8px 8px;
+        background: var(--ai-panel-bg, #f3f4f6);
+        border: 1px solid var(--border-color, #e0e0e0);
+        border-radius: 16px;
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+    }
+
+    &__header {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        margin: -2px -2px 2px;                          // 仿 vditor-bubble-palette__header
+    }
+
+    // 拖拽胶囊：仿 vditor-bubble-palette__drag（15px 高 / 50% 宽 / 胶囊 / 蓝灰对比）
+    &__drag {
+        flex: 0 0 50%;
+        height: 15px;
+        margin: 0 auto;
+        cursor: grab;
+        user-select: none;
+        touch-action: none;
+        border-radius: 12px;
+        background: color-mix(in srgb, var(--toolbar-icon-color, #586069) 6%, transparent);
+        transition: background-color 0.12s ease;
+
+        &:hover {
+            background: color-mix(in srgb, var(--toolbar-icon-color, #586069) 12%, transparent);
+        }
+
+        &:active {
+            cursor: grabbing;
+        }
+    }
+
+    // 锁定态：抓手高亮（蓝色，仿调色板）
+    &--pinned &__drag {
+        background: color-mix(in srgb, var(--toolbar-icon-hover-color, #4285f4) 32%, transparent);
+    }
+
+    // 关闭按钮（圆形，与 sparkle+ / send 按钮风格统一）
+    &__close {
+        flex-shrink: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 22px;
+        height: 22px;
+        padding: 0;
+        border: none;
+        border-radius: 50%;
+        background: #d95757;
+        color: #fff;
+        cursor: pointer;
+        transition: background-color 0.12s ease;
+
+        &:hover { background: #b91c1c; }
+        &:active { background: #991b1b; }
+
+        .codicon {
+            font-size: 14px;
+            line-height: 1;
+            pointer-events: none;
+        }
+    }
+
+    // ─── textarea ──────────────────────────────────────────────────────
+    &__textarea-wrap {
+        display: block;
+    }
+
+    &__textarea {
+        display: block;
+        width: 100%;
+        min-height: 64px;
+        max-height: 240px;
+        padding: 4px 8px;
+        font: inherit;
+        font-size: 13px;
+        line-height: 1.5;
+        color: var(--textarea-color, #333);
+        background: transparent;
+        border: none;
+        resize: none;
+        outline: none;
+        box-sizing: border-box;
+
+        &::placeholder {
+            color: var(--placeholder-color, #9ca3af);
+        }
+    }
+
+    // ─── 底部 action 行 ────────────────────────────────────────────────
+    &__row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+
+        &--actions {
+            gap: 6px;
+        }
+    }
+
+    // 通用 action 按钮（小尺寸 28×28 圆形，hover 加深）
+    &__action {
+        position: relative;
+        flex-shrink: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        padding: 0;
+        color: var(--icon-color, #4b5563);
+        background: var(--action-bg, #e5e7eb);
+        border: none;
+        border-radius: 50%;
+        cursor: pointer;
+        transition: background-color 0.12s ease, color 0.12s ease, transform 0.08s ease;
+
+        &:hover {
+            color: var(--icon-color-hover, #111827);
+            background: var(--action-bg-hover, #d1d5db);
+        }
+
+        &:active {
+            transform: scale(0.92);
+        }
+
+        .codicon {
+            font-size: 14px;
+        }
+
+        &--menu .codicon-sparkle {
+            font-size: 14px;
+        }
+    }
+
+    // sparkle+ 按钮的 "+" 角标
+    &__action-plus {
+        position: absolute;
+        right: 0;
+        bottom: 0;
+        width: 12px;
+        height: 12px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 9px !important;
+        color: #fff;
+        background: #3b82f6;
+        border: 1.5px solid var(--ai-panel-bg, #f3f4f6);
+        border-radius: 50%;
+        padding: 0;
+        line-height: 1;
+        pointer-events: none;
+    }
+
+    &__spacer {
+        flex: 1;
+    }
+
+    &__beta {
+        padding: 1px 6px;
+        font-size: 9px;
+        font-weight: 600;
+        color: var(--beta-color, #6b7280);
+        background: var(--beta-bg, rgba(107, 114, 128, 0.1));
+        border-radius: 3px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        user-select: none;
+    }
+
+    &__send {
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 30px;
+        height: 30px;
+        padding: 0;
+        color: #fff;
+        background: var(--send-bg, #3b82f6);
+        border: none;
+        border-radius: 40%;
+        cursor: pointer;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+        transition: background 0.15s ease, transform 0.08s ease, box-shadow 0.15s ease;
+
+        &:hover {
+            background: var(--send-bg-hover, #2563eb);
+            box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
+        }
+
+        &:active {
+            transform: scale(0.92);
+        }
+
+        &:disabled {
+            background: var(--send-bg-disabled, #ccc);
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+
+        .codicon {
+            font-size: 16px;
+            transform: rotate(45deg);
+        }
+    }
+
+    // ─── 主菜单（card 下方独立浮层） ─────────────────────────────────
+    &__menu {
+        position: fixed;
+        z-index: 10004;
+        min-width: 240px;
+        max-height: 360px;
+        padding: 6px;
+        overflow-y: auto;
+        background: var(--panel-bg, #ffffff);
+        border: 1px solid var(--border-color, #e0e0e0);
+        border-radius: 12px;                             // 与 card 同心
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+    }
+
+    &__menu-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        width: 100%;
+        padding: 10px 14px;                              // 更宽松
+        font-size: 14px;
+        line-height: 1;
+        color: var(--menu-color, #1f2937);
+        background: transparent;
+        border: none;
+        border-radius: 4px;                              // 内部小圆角
+        cursor: pointer;
+        text-align: left;
+
+        &:hover, &:focus {
+            background: var(--menu-bg-hover, #f3f4f6);
+            outline: none;
+        }
+    }
+
+    &__menu-icon {
+        flex-shrink: 0;
+        width: 18px;
+        font-size: 15px;
+        color: var(--menu-icon-color, #6b7280);
+        text-align: center;
+    }
+
+    &__menu-label {
+        flex: 1;
+    }
+
+    &__menu-chevron {
+        flex-shrink: 0;
+        font-size: 12px;
+        color: var(--menu-chevron-color, #9ca3af);
+    }
+
+    &__menu-divider {
+        height: 1px;
+        margin: 4px 14px;                                // 对齐 item
+        background: var(--divider-color, #e5e7eb);
+    }
+
+    &__menu-group {
+        padding: 8px 14px 4px;                           // 对齐 item
+        font-size: 11px;
+        font-weight: 500;                                 // 轻盈
+        color: var(--group-color, #9ca3af);
+        letter-spacing: 0.3px;
+    }
+
+    // ─── 二级菜单（润色 > hover 展开） ───────────────────────────────
+    &__submenu {
+        position: fixed;
+        z-index: 10005;
+        min-width: 100px;
+        padding: 6px;
+        background: var(--panel-bg, #ffffff);
+        border: 1px solid var(--border-color, #e0e0e0);
+        border-radius: 10px;                             // 介于 card 和 menu 之间
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+    }
+
+    &__submenu-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        width: 100%;
+        padding: 10px 14px;                              // 与主菜单一致
+        font-size: 14px;
+        line-height: 1;
+        color: var(--menu-color, #1f2937);
+        background: transparent;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        text-align: left;
+
+        &:hover, &:focus {
+            background: var(--menu-bg-hover, #f3f4f6);
+            outline: none;
+        }
+    }
+}

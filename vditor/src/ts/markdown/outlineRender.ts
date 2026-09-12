@@ -24,6 +24,18 @@ const getOutlineHeadingHTML = (item: HTMLElement, vditor?: IVditor) => {
     clone.querySelectorAll("wbr").forEach((node) => {
         node.remove();
     });
+    // LOW-10：大纲里跳过 html-inline 的内嵌渲染——只保留标题文本，避免大纲项被不可点击的
+    // html-inline shell 包住（点击会进入 edit 态但没有意义）
+    clone.querySelectorAll(".vditor-html-inline__display, [data-type='html-inline']").forEach((el) => {
+        // n10 修复：空 text 时 skip 不 remove——保留节点避免后续逻辑依赖节点存在性
+        // 原来 if-else 都会 remove 空 shell，可能让 ToC 出现幽灵空白
+        const text = (el.textContent || "").trim();
+        if (text) {
+            const span = document.createElement("span");
+            span.textContent = text;
+            el.replaceWith(span);
+        }
+    });
     escapeOutlineCodeHTML(clone);
     if (vditor?.currentMode === "ir") {
         return clone.outerHTML;

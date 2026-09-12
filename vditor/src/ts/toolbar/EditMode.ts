@@ -1,6 +1,7 @@
 import {Constants} from "../constants";
 import {processAfterRender} from "../ir/process";
 import {getMarkdown} from "../markdown/getMarkdown";
+import {flattenNestedHtmlInline} from "../htmlInline/htmlInlineEditor";
 import {mathRender} from "../markdown/mathRender";
 import {
     buildEditModePickerPanelHTML,
@@ -52,6 +53,9 @@ export const setEditMode = (
             hidePanel(vditor, ["subToolbar", "hint"]);
         }
         event.preventDefault();
+        // MED-7：切模式前先把外层 html-inline shell 的 data-md-source 与 visualHost 同步
+        // 否则嵌套色/嵌套 span 在切换后丢失
+        flattenNestedHtmlInline(vditor[vditor.currentMode].element);
         markdownText = getMarkdown(vditor);
     } else {
         markdownText = event;

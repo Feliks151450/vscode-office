@@ -6,6 +6,52 @@ let autoStatus = undefined
 let allowAutoShowOutline = true
 var editor
 let savedRange = null
+let aiAbortController = null   //  onPolish / onCancelPolish 共享，用于中断 fetch
+
+/**
+ * 把用户在 AI 弹窗填的 API 地址规范化成"完整 endpoint URL"。
+ * 用户可能填的形态有三种：
+ *   1) 纯域名：       https://api.feliks.top
+ *   2) 带版本前缀：    https://api.feliks.top/v1
+ *   3) 完整路径：      https://api.feliks.top/v1/chat/completions
+ * 三种都会被规范化成 form 3 的形式。OpenAI / Anthropic / Ollama 三种格式的补全逻辑不同。
+ * Gemini 路径特殊（含 model name），原样返回不补。
+ * @param {string} url 用户输入的 URL
+ * @param {string} format  api 格式：'openai' | 'anthropic' | 'ollama' | 'gemini' | 'auto'
+ * @returns {string} 规范化后的完整 endpoint URL
+ */
+function normalizeAIUrl(url, format = "openai") {
+    if (!url || typeof url !== "string") {
+        throw new Error("API 地址为空");
+    }
+    let u = url.trim().replace(/\/+$/, ""); // 去尾部 /
+    if (!/^https?:\/\//i.test(u)) {
+        throw new Error("API 地址必须以 http:// 或 https:// 开头");
+    }
+    // gemini 路径里要嵌入模型名，正则补全太复杂，原样返回，让上游 API 自己报清错误
+    if (format === "gemini") return u;
+
+    // 各格式的 endpoint 后缀 + 是否需要 /v1 前缀
+    const ENDPOINTS = {
+        openai:    { suffix: "/chat/completions", version: "/v1" },
+        anthropic: { suffix: "/messages",         version: "/v1" },
+        ollama:    { suffix: "/api/chat",         version: null    },
+    };
+    // auto 走 OpenAI 兼容路径（最常见）
+    const cfg = ENDPOINTS[format] || ENDPOINTS.openai;
+
+    // 1) 已含 endpoint 后缀 → 原样
+    if (u.endsWith(cfg.suffix)) return u;
+
+    // 2) 已含 /vN[/beta] 前缀（Anthropic/OAI 都用）→ 追加 endpoint
+    //    注意 Ollama 的 version=null，不走这一支
+    if (cfg.version && /\/v\d+(?:beta)?$/i.test(u)) {
+        return u + cfg.suffix;
+    }
+
+    // 3) 纯域名 → 补 /v1 + endpoint；Ollama 则直接补 endpoint（无版本前缀）
+    return u + (cfg.version || "") + cfg.suffix;
+}
 let i18n = {
   'alignCenter': '居中',
   'alignLeft': '居左',
@@ -60,6 +106,75 @@ let i18n = {
   'codeMirror': '代码编辑',
   'typewriterMode': '打字机模式',
   'boldColor': '加粗颜色',
+  // ===== AI 润色弹窗 =====
+  'aiPolish': 'AI 润色',
+  'aiPolishBtn': '润色',
+  'aiQuickActions': '快捷操作',
+  'aiCancel': '取消',
+  'aiSave': '保存',
+  'aiEdit': '编辑',
+  'aiAccept': '接受',
+  'aiReject': '拒绝',
+  'aiStop': '停止',
+  'aiGenerating': '生成中…',
+  'aiReviewTitle': '审阅变更',
+  'aiOriginal': '原文',
+  'aiResult': 'AI 结果',
+  'aiUpdateGoal': '本次目标',
+  'aiUpdateGoalPlaceholder': '例如：让语气更正式 / 翻译成英文 / 修复语法…',
+  'aiPromptLabel': '提示词',
+  'aiPromptName': '提示词名称',
+  'aiPromptContent': '提示词内容',
+  'aiPromptNone': '未选择提示词',
+  'aiAddPrompt': '新建提示词',
+  'aiNoPrompts': '暂无提示词',
+  'aiEngine': '引擎',
+  'aiVscodeApi': 'VSCode API',
+  'aiCustom': '自定义',
+  'aiOutputLanguage': '输出语言',
+  'aiOutputLangAuto': '跟随界面语言',
+  'aiVscodeModelAuto': '自动',
+  'aiModel': '模型',
+  'aiModelName': '模型名称（可选）',
+  'aiNoModelSelected': '未选择模型',
+  'aiAddModel': '新建模型',
+  'aiNoModels': '暂无模型',
+  'aiApiUrl': 'API 地址',
+  'aiApiKey': 'API 密钥',
+  'aiApiFormat': 'API 格式',
+  'aiApiFormatAuto': '自动',
+  'aiApiFormatOpenAI': 'OpenAI 兼容',
+  'aiApiFormatAnthropic': 'Anthropic',
+  'aiApiFormatGemini': 'Gemini',
+  'aiApiFormatOllama': 'Ollama',
+  'aiSearch': '搜索…',
+  'aiCopilotUnavailable': 'Copilot 暂不可用',
+  // ===== AI 浮动输入面板 =====
+  'aiInputPanelPlaceholder': '问 AI',
+  'aiInputPanelSend': '发送',
+  'aiInputPanelStop': '停止',
+  'aiCategoryRewrite': 'AI 帮我改',
+  'aiBeta': 'Beta',
+  'aiInput': 'AI 帮我',
+  'aiBlockMenuInput': 'AI 帮我',
+  'aiPresetContinue': '续写',
+  'aiPresetCowrite': '伴写',
+  'aiPresetRewrite': '重写',
+  'aiPresetSynonym': '换同义词',
+  'aiPolishFormat': '格式',
+  'aiPolishTone': '语气',
+  'aiPolishDetail': '详略',
+  // ===== 加粗颜色 =====
+  'boldColorDefault': '默认',
+  'boldColorPlain': '纯文本',
+  'boldColorAccent': '强调色',
+  'boldColorRed': '红色',
+  'boldColorOrange': '橙色',
+  'boldColorPurple': '紫色',
+  'boldColorTeal': '青色',
+  // ===== 设置面板底部 =====
+  'settingsEditFile': '编辑配置文件',
+  'settingsReset': '重置',
   'indent': '列表缩进',
   'info': '关于',
   'inline-code': '行内代码',
@@ -148,8 +263,11 @@ window.BLOCK_MENU_ITEMS = [
     { action: "duplicate", label: "克隆块", icon: "copy" },
     { action: "delete", label: "删除块", icon: "trash" },
     { type: "divider" },
+    { action: "ai-polish", label: "AI 润色", icon: "sparkle" },
+    { action: "ai-input", label: "AI 输入", icon: "comment-discussion" },
+    { type: "divider" },
     { action: "insert-before", label: "在前插入", icon: "arrow-up" },
-    { action: "insert-after", label: "在后插入", icon: "arrow-down" },
+    { action: "insert-after", label: "在后插入", icon: "arrow-down" }
 ];
 
 
@@ -622,6 +740,7 @@ window.BLOCK_MENU_ITEMS = [
                             openLatexModal(vd, seed);
                         },
                     },
+                    'settings',
                     {
                       hotkey: '⌘S',
                       name: 'save',
@@ -630,9 +749,7 @@ window.BLOCK_MENU_ITEMS = [
                       className: 'save',
                       icon: '',
                       click () {window.location.href = "nativeCommand://save"},
-                    },
-                    '|',
-                    'settings',
+                    }
                 ],
                 value: defaultValue,
                 // 编辑器异步渲染完成后 vditor.vditor.wysiwyg.element 才挂载——必须在这时
@@ -666,6 +783,185 @@ window.BLOCK_MENU_ITEMS = [
                 },
                 ctrlEnter: ()=>{window.location.href = "nativeCopy://test" ;},
                 image:{isPreview:false,preview:(element)=>{window.location.href = element.src}},
+                // ===== AI 润色：临时测试实现（直接 fetch，不走 aipolish:// 协议）=====
+                // ⚠️ API key 硬编码在前端 JS 里，**仅用于本地 UI 测试**，生产环境必须改回
+                // aipolish:// 协议委托宿主端持有 key。任何 DevTools 都能看到这个 key。
+                // 端点 OpenAI 兼容（chat completions + SSE 流式）。
+                // 在 AI 弹窗的"自定义"tab 里手动填的 customUrl/customKey/customModel 会覆盖下面的默认值。
+                ai: {
+                    onPolish: async (markdown, _apply, opts) => {
+                        console.log("markdown",markdown)
+                        console.log("opts",opts)
+                        // 解析 API 格式：弹窗里下拉选的是 'openai' / 'anthropic' / 'gemini' / 'ollama' / 'auto'
+                        const format = opts?.customApiFormat || "openai";
+                        // 用户在弹窗"自定义"tab 里填的 URL 优先；没填则用下面默认值
+                        // 默认值只填到域名（让 normalizeAIUrl 帮我们补 /v1/chat/completions）
+                        const rawUrl = opts?.customUrl   || "https://api.feliks.top";
+                        let url;
+                        try {
+                            url = normalizeAIUrl(rawUrl, format);
+                        } catch (e) {
+                            console.error("[ai] URL 规范化失败:", e.message, "raw:", rawUrl);
+                            window.vditor?.tip?.(`AI 地址无效：${e.message}`, 3000);
+                            window.vditor?.enable?.();
+                            return;
+                        }
+                        const key    = opts?.customKey 
+                        const model  = opts?.customModel || "doubao-seed-1-6-flash-nothinking";
+                        console.log("[ai] request →", { url, model, format, markdownLen: markdown.length });
+
+                        // 解析输出语言（auto = 跟随 UI 语言）
+                        const LANG_NAME = {
+                            zh_CN: "简体中文", zh_TW: "繁體中文", en_US: "English",
+                            ja_JP: "日本語", ko_KR: "한국어", ru_RU: "Русский",
+                        };
+                        const lang = (!opts?.outputLanguage || opts.outputLanguage === "auto")
+                            ? (opts?.uiLanguage || "zh_CN")
+                            : opts.outputLanguage;
+                        const langName = LANG_NAME[lang] || "简体中文";
+
+                        // system prompt：角色定义 + 格式规则 + 当前 markdown 原文
+                        // （选中的 markdown 内容放在 system 上下文里更合适——这是 AI 要处理的对象）
+                        const systemPrompt = [
+                            "你是一个专业的 Markdown 润色助手。",
+                            `输出语言：${langName}`,
+                            "严格遵守：",
+                            "1. 保持 Markdown 结构完全不变,通过行内 html 修改文字的颜色和背景颜色",
+                            "2. 只改进文字表达、修正语法错字、提升可读性与流畅度",
+                            "3. 调用submit_polished_markdown工具函数，将润色后的 Markdown 返回",
+                            "待润色文本：",
+                            "```markdown",
+                            markdown,
+                            "```",
+                        ].join("\n");
+
+                        // user message：只放 userInput（用户手动输入的额外指令）
+                        // 角色 / 输出语言 / 格式规则 / 选中的 markdown 都已在 system 里
+                        // goal 是预设固定目标，已隐含在 system 的"你是 Markdown 润色助手"中
+                        // 如果没有 userInput，就不放任何东西（user message 为空字符串时部分 API 会报错，所以用单个空格占位）
+                        const userMessage = (opts?.userInput && opts.userInput.trim())
+                            ? `用户指令：${opts.userInput}`
+                            : " ";
+
+                        // 用 AbortController 支持 onCancelPolish
+                        aiAbortController = new AbortController();
+
+                        try {
+                            const response = await fetch(url, {
+                                method: "POST",
+                                headers: {
+                                    "Authorization": `Bearer ${key}`,
+                                    "Content-Type": "application/json",
+                                },
+                                body: JSON.stringify({
+                                    model,
+                                    messages: [
+                                        { role: "system", content: systemPrompt },
+                                        { role: "user",   content: userMessage },
+                                    ],
+                                    // 工具调用：强制 LLM 把润色结果通过函数参数返回，
+                                    // 而不是直接文本输出。好处：避免 LLM 在 result 前后加
+                                    // "Here is the polished version:" 之类的废话，也方便解析。
+                                    tools: [
+                                        {
+                                            type: "function",
+                                            function: {
+                                                name: "submit_polished_markdown",
+                                                description: "提交润色后的 Markdown 文本。当且仅当润色完成时调用一次。",
+                                                parameters: {
+                                                    type: "object",
+                                                    properties: {
+                                                        markdown: {
+                                                            type: "string",
+                                                            description: "润色后的完整 Markdown 文本，保留原文结构。",
+                                                        },
+                                                    },
+                                                    required: ["markdown"],
+                                                },
+                                            },
+                                        },
+                                    ],
+                                    tool_choice: { type: "function", function: { name: "submit_polished_markdown" } },
+                                    stream: true,
+                                    temperature: 0.7,
+                                }),
+                                signal: aiAbortController.signal,
+                            });
+
+                            if (!response.ok) {
+                                const errText = await response.text().catch(() => "");
+                                throw new Error(`HTTP ${response.status}${errText ? `: ${errText.slice(0, 200)}` : ""}`);
+                            }
+                            if (!response.body) {
+                                throw new Error("response.body is null");
+                            }
+
+                            // 流式解析 SSE（OpenAI 兼容格式：data: {...}\n\n，结束为 data: [DONE]）
+                            // 工具调用模式：从 delta.tool_calls[0].function.arguments 拿流式 JSON 字符串
+                            // （整个 markdown 字段以 partial JSON 形式逐 chunk 传来）
+                            const reader = response.body.getReader();
+                            const decoder = new TextDecoder("utf-8");
+                            let buffer = "";
+
+                            while (true) {
+                                const { done, value } = await reader.read();
+                                if (done) break;
+
+                                buffer += decoder.decode(value, { stream: true });
+                                const lines = buffer.split("\n");
+                                buffer = lines.pop() || "";  // 最后一段可能不完整，留到下次
+
+                                for (const raw of lines) {
+                                    const line = raw.trim();
+                                    if (!line.startsWith("data:")) continue;
+                                    const data = line.slice(5).trim();
+                                    if (!data) continue;
+                                    if (data === "[DONE]") {
+                                        window.endAIStream();
+                                        aiAbortController = null;
+                                        return;
+                                    }
+                                    try {
+                                        const evt = JSON.parse(data);
+                                        const toolCalls = evt.choices?.[0]?.delta?.tool_calls;
+                                        if (toolCalls && toolCalls.length > 0) {
+                                            // 同一 index 的 tool_call 跨多个 chunk 累积 arguments
+                                            for (const tc of toolCalls) {
+                                                if (tc.function?.arguments) {
+                                                    window.streamAIChunk(tc.function.arguments);
+                                                }
+                                            }
+                                        }
+                                        // 错误事件（如上游超长 prompt 报错）
+                                        if (evt.error) {
+                                            throw new Error(evt.error.message || "上游返回错误");
+                                        }
+                                    } catch (e) {
+                                        if (e instanceof SyntaxError) continue;  // 忽略单行 JSON 错误
+                                        throw e;
+                                    }
+                                }
+                            }
+                            // 流正常结束但没收到 [DONE]（少数实现省略）—— 仍调用一次
+                            window.endAIStream();
+                        } catch (e) {
+                            if (e.name === "AbortError") {
+                                console.log("[ai] cancelled by user");
+                                return;
+                            }
+                            console.error("[ai] polish failed:", e);
+                            window.vditor?.tip?.(`AI 润色失败：${e.message}`, 3000);
+                            // 兜底：解锁编辑器，避免卡在 disabled 态
+                            window.vditor?.enable?.();
+                        } finally {
+                            aiAbortController = null;
+                        }
+                    },
+                    onCancelPolish: () => {
+                        // 用户在审阅面板点 Stop —— 立即中断 fetch
+                        aiAbortController?.abort();
+                    },
+                },
                 hint: {
                   delay:20,
                   extend: [
@@ -747,7 +1043,7 @@ window.BLOCK_MENU_ITEMS = [
             window.vditor = vditor;
             console.log("vditor init done", vditor);
             vditor.setViewerSettingsSyncEnabled(true);
-
+            vditor.setCopilotAvailable(true);
             bindLatexModalButtons();
             setupLatexSdkOnIframeLoad();
 
@@ -854,6 +1150,58 @@ function copyToClipboard(text) {
   console.log("copyToClipboard",text)
   window.location.href = "nativeCopy://content="+encodeURIComponent(text);
 }
+
+// ===== AI 润色：宿主侧回写助手 =====
+// 宿主拦截 aipolish://content=<json> 后开始 LLM 请求，结果通过这三个函数之一回写：
+// 1) 一次性回写（不流式）：window.applyAIResult(markdown, replaceAll, ?rangeJSON)
+// 2) 流式回写（推荐）：window.streamAIChunk(chunk) + window.endAIStream()，
+//    然后等用户在审阅面板点 Accept（自动 applyAIResult）或 Reject（丢弃）
+function applyAIResult(markdown, replaceAll, range) {
+  const vd = window.vditor;
+  if (!vd) { console.warn("[ai] applyAIResult: window.vditor 未就绪"); return; }
+  // LOW-9：range 序列化协议必须含 DOM 节点引用——之前用 detached textNode 重建的
+  // Range 不属于当前编辑器，会触发 applyAIResult 的安全降级（块级替换），
+  // 但这是用户看不到的隐性行为。这里改成：
+  //   - 如果 range 含有 startNode（DOM 元素引用），用 createRange() 重建并校验
+  //   - 否则不传 range，让 vd.applyAIResult 走块级替换的安全网
+  let r = null;
+  if (range && typeof range.startNode !== "undefined") {
+    try {
+      const startEl = range.startNode;
+      const endEl = range.endNode || startEl;
+      const startOffset = range.startOffset || 0;
+      const endOffset = range.endOffset || (startEl.childNodes?.length || 0);
+      if (startEl.isConnected) {
+        r = document.createRange();
+        r.setStart(startEl, Math.min(startOffset, startEl.childNodes?.length || 0));
+        r.setEnd(endEl, Math.min(endOffset, endEl.childNodes?.length || 0));
+      } else {
+        console.warn("[ai] range.startNode 已不在 DOM，安全降级到块级替换");
+      }
+    } catch (e) {
+      console.warn("[ai] range 反序列化失败，回退到非选区替换", e);
+      r = null;
+    }
+  } else if (range) {
+    console.warn("[ai] range 缺少 startNode 引用（新协议要求），安全降级到块级替换");
+  }
+  vd.applyAIResult(markdown, replaceAll !== false, r);
+}
+window.applyAIResult = applyAIResult;
+
+function streamAIChunk(chunk) {
+  const vd = window.vditor;
+  if (!vd) return;
+  vd.streamAIChunk(chunk);
+}
+window.streamAIChunk = streamAIChunk;
+
+function endAIStream() {
+  const vd = window.vditor;
+  if (!vd) return;
+  vd.endAIStream();
+}
+window.endAIStream = endAIStream;
 
 async function createPresignedUrl(fileName) {
   const url = "https://api2.feliks.top/v1/chat/completions"
@@ -962,22 +1310,30 @@ async function uploadFile(url,file) {
     let selectionObj = null, rangeObj = null;
     let selectedText = "", selectedHtml = "";
 
-    // 处理兼容性
-    if(window.getSelection){
-      // 现代浏览器
-      // 获取text
+    // LOW-8：优先用 Vditor 新公开 API `getSelectionMarkdown()` 拿结构化 markdown
+    // - 保留 html-inline / 行内 math / color span 结构（不会丢）
+    // - 替代旧的 `vditor.html2md(range.cloneContents().innerHTML)` 通用 HTML 转换
+    if (vditor && typeof vditor.getSelectionMarkdown === "function") {
+      const md = vditor.getSelectionMarkdown();
+      if (md) {
+        return md;
+      }
+      // 选区为空（光标位置）→ fallback 到 getValue
+      return vditor.getValue ? vditor.getValue() : "";
+    }
+
+    // 旧路径（保留作为兼容 / fallback）
+    if (window.getSelection) {
       selectionObj = window.getSelection();
-      //  获取html
       rangeObj = selectionObj.getRangeAt(0);
       var docFragment = rangeObj.cloneContents();
       var tempDiv = document.createElement("div");
       tempDiv.appendChild(docFragment);
       selectedHtml = tempDiv.innerHTML;
-    } else if(document.selection){
-        // 非主流浏览器IE
-        selectionObj = document.selection;
-        rangeObj = selectionObj.createRange();
-        selectedHtml = rangeObj.htmlText;
+    } else if (document.selection) {
+      selectionObj = document.selection;
+      rangeObj = selectionObj.createRange();
+      selectedHtml = rangeObj.htmlText;
     }
     let tem = vditor.html2md(selectedHtml);
     let md = tem.replace(/\*\*\\\*\\\*\*\*/g, "")
